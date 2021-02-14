@@ -92,30 +92,36 @@ struct Hit
 
 Hit nullHit = Hit(Material(vec3(0.), 0., 0., 0., 0.), 10000, vec3(0.), vec3(0.), false);
 
-//** INTERSECTIONS **
-Hit boxIntersection(Ray ray, Box box, /*in mat4 txi -- inverse, in vec3 rad -- size/2 -- from box, out vec2 oT, out vec3 oN, */ out vec2 uvPosition, out int faceNumber) 
+//** MATH **
+mat4 rotationMatrix(vec3 rotation)
 {
-    mat4 rotationY = mat4(
-        cos(box.rotation.y),  0, sin(box.rotation.y), 0,
-        0,                    1, 0,                   0,
-        -sin(box.rotation.y), 0, cos(box.rotation.y), 0,
-        0,                    0, 0,                   1
+    mat4 rotationX = mat4(
+        1, 0,               0,                0,
+        0, cos(rotation.x), -sin(rotation.x), 0,
+        0, sin(rotation.x), cos(rotation.x),  0,
+        0, 0,               0,                1
     );
 
-    mat4 rotationX = mat4(
-        1, 0,                   0,                    0,
-        0, cos(box.rotation.x), -sin(box.rotation.x), 0,
-        0, sin(box.rotation.x), cos(box.rotation.x),  0,
-        0, 0,                   0,                    1
+    mat4 rotationY = mat4(
+        cos(rotation.y),  0, sin(rotation.y), 0,
+        0,                1, 0,               0,
+        -sin(rotation.y), 0, cos(rotation.y), 0,
+        0,                0, 0,               1
     );
 
     mat4 rotationZ = mat4(
-        cos(box.rotation.z), -sin(box.rotation.z), 0, 0,
-        sin(box.rotation.z), cos(box.rotation.z),  0, 0,
-        0,                   0,                    1, 0,
-        0,                   0,                    0, 1
+        cos(rotation.z), -sin(rotation.z), 0, 0,
+        sin(rotation.z), cos(rotation.z),  0, 0,
+        0,               0,                1, 0,
+        0,               0,                0, 1
     );
 
+    return rotationX * rotationY * rotationZ;
+}
+
+//** INTERSECTIONS **
+Hit boxIntersection(Ray ray, Box box, /*in mat4 txi -- inverse, in vec3 rad -- size/2 -- from box, out vec2 oT, out vec3 oN, */ out vec2 uvPosition, out int faceNumber) 
+{
     mat4 position = mat4(
         1,              0,              0,              0,
         0,              1,              0,              0,
@@ -123,7 +129,7 @@ Hit boxIntersection(Ray ray, Box box, /*in mat4 txi -- inverse, in vec3 rad -- s
         box.position.x, box.position.y, box.position.z, 1
     );
 
-    mat4 transformWorldToBox = inverse(rotationY * rotationX * rotationZ * position);
+    mat4 transformWorldToBox = inverse(rotationMatrix(box.rotation) * position);
 
     // Convert World To Box dimension
     vec3 rayDirection = (transformWorldToBox * vec4(ray.direction, 0.)).xyz;
@@ -374,12 +380,17 @@ void main()
     vec3 color = vec3(0.);
     vec2 msaa = vec2(1.) / MSAA;
     vec3 offset;
+    vec3 direction;
 
     for (int i = 0; i < MSAA * MSAA; i++)
     {
         offset = vec3(msaa.xy * i / screenSize.y, 0.);
 
-        Ray ray = Ray(camera.position, normalize(camera.rotation + vec3(screenSize.x/screenSize.y * uv.x, uv.y, -camera.focal) + offset));
+        direction = vec3(screenSize.x/screenSize.y * uv.x, uv.y, -camera.focal) + offset;
+
+        direction = (rotationMatrix(camera.rotation) * vec4(direction, 0.)).xyz;
+
+        Ray ray = Ray(camera.position, normalize(direction));
         color += radiance(ray, sunLight) / (MSAA * MSAA);
     }
 

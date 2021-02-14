@@ -44,14 +44,9 @@ namespace PortalsRT
         {
             GL.ClearColor(Color.Black);
 
-            // VBO = ArrayBuffer
             vertexBufferObject = GL.GenBuffer();
             GL.BindBuffer(BufferTarget.ArrayBuffer, vertexBufferObject);
 
-            // There are three different BufferUsageHints for drawing:
-            //   StaticDraw: This buffer will rarely, if ever, update after being initially uploaded.
-            //   DynamicDraw: This buffer will change frequently after being initially uploaded.
-            //   StreamDraw: This buffer will change on every frame.
             GL.BufferData(BufferTarget.ArrayBuffer, vertices.Length * sizeof(float), vertices, BufferUsageHint.StaticDraw);
 
             vertexArrayObject = GL.GenVertexArray();
@@ -90,8 +85,6 @@ namespace PortalsRT
                 GL.DrawArrays(PrimitiveType.TriangleStrip, 0, 5);
 
                 SwapBuffers();
-
-                // base.OnRenderFrame(e);
             };
 
             Run();

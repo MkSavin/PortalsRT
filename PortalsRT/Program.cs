@@ -26,22 +26,17 @@ namespace PortalsRT
             using (var window = new Window(GameWindowSettings.Default, nativeWindowSettings))
             {
                 // window.VSync = VSyncMode.Off;
+
                 window.Render((deltaTick, shader) => {
-
-                    ProcessKeyboardControls(window);
-                    ProcessMouseControls(window);
-
                     Camera.Instance.ProcessGameMode();
 
                     shader.SetVector3("cameraRotation", Camera.Instance.transform.rotation);
                     shader.SetVector3("cameraPosition", Camera.Instance.transform.position);
 
                     Console.SetCursorPosition(0, 0);
-                    Console.WriteLine("Current position: " + Camera.Instance.transform.position);
-                    Console.WriteLine("Current rotation: " + Camera.Instance.transform.rotation);
-                });
 
-                // window.Run();
+                    Console.WriteLine("Camera: " + Camera.Instance.transform);
+                });
             }
         }
 
