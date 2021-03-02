@@ -1,49 +1,27 @@
-﻿using OpenTK.Windowing.GraphicsLibraryFramework;
-using System;
-using System.Collections.Generic;
-using System.Text;
+﻿using OpenTK.Mathematics;
+using OpenTK.Windowing.GraphicsLibraryFramework;
 
 namespace PortalsRT.Input
 {
-    public static class Controls
+    public class Controls
     {
-        public static float MouseSensitivityX = 1;
-        public static float MouseSensitivityY = 1;
+        KeyboardState keyboard;
+        Vector2 mouseDelta;
 
-        public static KeyboardState KeyboardState { get; set; }
-        public static MouseState MouseState { get; set; }
+        // TODO: move to settings class
+        public Vector2 MouseSensetivity = Vector2.One;
 
-        private static MouseState mousePrevState;
-
-        public static (float X, float Y) MouseRawInput()
+        public Controls(KeyboardState _keyboard, Vector2 _mouseDelta)
         {
-            if (mousePrevState == null)
-            {
-                mousePrevState = MouseState;
-            }
-
-            // var result = (MouseState.X - mousePrevState.X, MouseState.Y - mousePrevState.Y);
-            var result = (MouseState.Delta.X, MouseState.Delta.Y);
-
-            Console.WriteLine(result);
-
-            mousePrevState = MouseState;
-
-            return result;
+            keyboard = _keyboard;
+            mouseDelta = _mouseDelta;
         }
 
-        public static (float X, float Y) MouseInput()
+        public bool OneOfKeysDown(params Keys[] keys)
         {
-            var result = MouseRawInput();
-
-            return (result.X * MouseSensitivityX / 500, result.Y * MouseSensitivityY / 500);
-        }
-
-        public static bool IsPressed(params Keys[] Keyss)
-        {
-            foreach (var Keys in Keyss)
+            foreach (var key in keys)
             {
-                if (KeyboardState.IsKeyDown(Keys))
+                if (keyboard.IsKeyDown(key))
                 {
                     return true;
                 }
@@ -52,88 +30,29 @@ namespace PortalsRT.Input
             return false;
         }
 
-        public static bool IsWindowState()
+        public int OppositeInput(bool straight, bool inverse)
         {
-            return IsPressed(Keys.F11);
+            return straight == inverse ? 0 : (straight ? 1 : -1); 
         }
 
-        static bool windowStatePressedPreviously;
-
-        public static bool IsWindowStateChanged()
+        public Vector3 GetMoveRelativeInputDirection()
         {
-            var windowState = IsWindowState();
-            var result = windowState && !windowStatePressedPreviously;
-            windowStatePressedPreviously = windowState;
-
-            return result;
+            return
+                -Vector3.UnitZ * OppositeInput(OneOfKeysDown(Keys.W, Keys.Up), OneOfKeysDown(Keys.S, Keys.Down)) +
+                Vector3.UnitX * OppositeInput(OneOfKeysDown(Keys.D, Keys.Right), OneOfKeysDown(Keys.A, Keys.Left));
         }
 
-        public static bool IsForward()
+        public Vector3 GetMoveAbsoluteInputDirection()
         {
-            return IsPressed(Keys.W, Keys.Up);
-        }
+            return
+                Vector3.UnitY * OppositeInput(OneOfKeysDown(Keys.Space), OneOfKeysDown(Keys.LeftShift, Keys.RightShift));
+        } 
 
-        public static bool IsBackward()
+        public Vector3 GetLookUpInputDirection()
         {
-            return IsPressed(Keys.S, Keys.Down);
+            Vector2 rawInput = mouseDelta * MouseSensetivity;
+
+            return new Vector3(rawInput.Y, rawInput.X, 0);
         }
-
-        public static bool IsLeft()
-        {
-            return IsPressed(Keys.A, Keys.Left);
-        }
-
-        public static bool IsRight()
-        {
-            return IsPressed(Keys.D, Keys.Right);
-        }
-
-        public static bool IsTop()
-        {
-            return IsPressed(Keys.Space);
-        }
-
-        public static bool IsBottom()
-        {
-            return IsPressed(Keys.LeftShift, Keys.RightShift);
-        }
-        public static float OppositeInput(bool positive, bool negative)
-        {
-            var value = 0;
-
-            // Solution with +/- solves the rollover problem
-            if (positive)
-            {
-                value += 1;
-            }
-
-            if (negative)
-            {
-                value -= 1;
-            }
-
-            return value;
-        }
-
-        public static float ForwardInput()
-        {
-            return OppositeInput(IsForward(), IsBackward());
-        }
-
-        public static float LeftInput()
-        {
-            return OppositeInput(IsLeft(), IsRight());
-        }
-
-        public static float TopInput()
-        {
-            return OppositeInput(IsTop(), IsBottom());
-        }
-
-        public static float JumpInput()
-        {
-            return IsTop() ? 1 : 0;
-        }
-
     }
 }

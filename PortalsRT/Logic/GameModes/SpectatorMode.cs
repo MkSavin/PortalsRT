@@ -2,5 +2,9 @@
 {
     class SpectatorMode : GameMode
     {
+        public SpectatorMode()
+        {
+            Name = "Spectator";
+        }
     }
 }

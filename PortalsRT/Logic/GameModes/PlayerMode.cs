@@ -6,6 +6,7 @@
         {
             Gravity = 5f;
             NoClip = false;
+            Name = "Player";
         }
     }
 }

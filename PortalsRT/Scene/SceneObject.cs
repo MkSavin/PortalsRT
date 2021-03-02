@@ -2,12 +2,12 @@
 using System.Collections.Generic;
 using System.Text;
 
-using OpenTK.Mathematics;
+using PortalsRT.Mathematics.Vector;
 
 namespace PortalsRT.Scene
 {
     public class SceneObject
     {
-
+        public Transform transform = new Transform();
     }
 }

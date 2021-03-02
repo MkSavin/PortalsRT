@@ -2,7 +2,7 @@
 using System.Collections.Generic;
 using System.Text;
 
-namespace PortalsRT.Math
+namespace PortalsRT.Mathematics
 {
     public static class Trigonometry
     {

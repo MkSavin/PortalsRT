@@ -8,6 +8,7 @@ using OpenTK.Windowing.GraphicsLibraryFramework;
 using PortalsRT.Shaders;
 using PortalsRT.Scene;
 using PortalsRT.Input;
+using PortalsRT.Output;
 
 namespace PortalsRT
 {
@@ -28,38 +29,15 @@ namespace PortalsRT
                 // window.VSync = VSyncMode.Off;
 
                 window.Render((deltaTick, shader) => {
-                    Camera.Instance.ProcessGameMode();
 
-                    shader.SetVector3("cameraRotation", Camera.Instance.transform.rotation);
-                    shader.SetVector3("cameraPosition", Camera.Instance.transform.position);
+                    StatBar.Write();
 
-                    Console.SetCursorPosition(0, 0);
+                    Camera.Instance.ProcessInput(window.KeyboardState, window.MouseState.Delta);
+                    Camera.Instance.ProcessPhysics();
+                    Camera.Instance.UploadTransformToShader(shader);
 
-                    Console.WriteLine("Camera: " + Camera.Instance.transform);
                 });
             }
-        }
-
-
-        private static void ProcessKeyboardControls(Window window)
-        {
-            var camera = Camera.Instance;
-
-            camera.ProcessControls();
-
-            if (Controls.IsWindowStateChanged())
-            {
-                window.WindowState = window.WindowState == WindowState.Fullscreen ? WindowState.Normal : WindowState.Fullscreen;
-            }
-        }
-
-        private static void ProcessMouseControls(Window window)
-        {
-            var camera = Camera.Instance;
-            var mouseInput = Controls.MouseInput();
-
-            camera.AddYawInput(mouseInput.X);
-            camera.AddPitchInput(mouseInput.Y);
         }
 
     }

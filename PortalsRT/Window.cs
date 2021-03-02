@@ -64,7 +64,7 @@ namespace PortalsRT
             shader.Use();
 
             CursorGrabbed = true;
-            CursorVisible = false;
+            // CursorVisible = false;
 
             base.OnLoad();
         }
@@ -99,21 +99,19 @@ namespace PortalsRT
                 Close();
             }
 
-            Controls.KeyboardState = KeyboardState;
-            Controls.MouseState = MouseState;
-
             base.OnUpdateFrame(e);
         }
 
         protected override void OnResize(ResizeEventArgs e)
         {
+            base.OnResize(e);
+
             if (shader != null)
             {
                 shader.SetVector3("screenSize", new Vector3(Size.X, Size.Y, 0));
             }
 
             GL.Viewport(0, 0, Size.X, Size.Y);
-            base.OnResize(e);
         }
 
         protected override void OnUnload()

@@ -7,8 +7,9 @@ const float gammaCorrection = 2.2;
 const float epsilon = 4e-4;
 
 uniform vec3 screenSize;
-uniform vec3 cameraRotation;
-uniform vec3 cameraPosition;
+uniform vec3 camera_rotation;
+uniform vec3 camera_position;
+
 out vec4 outputColor;
 
 //** Scene **
@@ -93,7 +94,14 @@ struct Hit
 Hit nullHit = Hit(Material(vec3(0.), 0., 0., 0., 0.), 10000, vec3(0.), vec3(0.), false);
 
 //** MATH **
-mat4 rotationMatrix(vec3 rotation)
+struct RotationMatrixComponents
+{
+    mat4 x;
+    mat4 y;
+    mat4 z;
+};
+
+RotationMatrixComponents rotationMatrix(vec3 rotation)
 {
     mat4 rotationX = mat4(
         1, 0,               0,                0,
@@ -116,11 +124,11 @@ mat4 rotationMatrix(vec3 rotation)
         0,               0,                0, 1
     );
 
-    return rotationX * rotationY * rotationZ;
+    return RotationMatrixComponents(rotationX, rotationY, rotationZ);
 }
 
 //** INTERSECTIONS **
-Hit boxIntersection(Ray ray, Box box, /*in mat4 txi -- inverse, in vec3 rad -- size/2 -- from box, out vec2 oT, out vec3 oN, */ out vec2 uvPosition, out int faceNumber) 
+Hit boxIntersection(Ray ray, Box box, out vec2 uvPosition, out int faceNumber) 
 {
     mat4 position = mat4(
         1,              0,              0,              0,
@@ -129,7 +137,9 @@ Hit boxIntersection(Ray ray, Box box, /*in mat4 txi -- inverse, in vec3 rad -- s
         box.position.x, box.position.y, box.position.z, 1
     );
 
-    mat4 transformWorldToBox = inverse(rotationMatrix(box.rotation) * position);
+    RotationMatrixComponents rotationComponents = rotationMatrix(box.rotation);
+
+    mat4 transformWorldToBox = inverse(rotationComponents.x * rotationComponents.y * rotationComponents.z * position);
 
     // Convert World To Box dimension
     vec3 rayDirection = (transformWorldToBox * vec4(ray.direction, 0.)).xyz;
@@ -179,27 +189,32 @@ Hit boxIntersection(Ray ray, Box box, /*in mat4 txi -- inverse, in vec3 rad -- s
         faceNumber = (9 + int(side.z)) / 2;
     }
 
-    // oT = vec2(distanceToNear, distanceToFar);
-    
     return Hit(box.material, distanceToNear, ray.origin + ray.direction * distanceToNear, normal, true);
 }
 
 Hit planeIntersection(Ray ray, Plane plane)
 {
-    float dotNormal = dot(plane.direction, ray.direction);
+    vec3 distanceVector = plane.position - ray.origin;
 
+    if (dot(plane.direction, distanceVector) > 0.)
+    {
+        plane.direction *= -1;
+    }
+
+    float dotNormal = dot(plane.direction, ray.direction);
+    
     if (dotNormal > 0.)
     {
         return nullHit;
     }
 
-    float distanceTo = -(dot(ray.origin, plane.direction)) / dotNormal;
+    float distanceTo = -dot(ray.origin, plane.direction) / dotNormal;
 
     vec3 hitPosition = ray.origin + distanceTo * ray.direction;
 
-    vec3 distanceVector = hitPosition - plane.position;
+    vec3 hitDistanceVector = hitPosition - plane.position;
 
-    if (abs(distanceVector.z) > plane.size.y || abs(distanceVector.x) > plane.size.x)
+    if (abs(hitDistanceVector.z) > plane.size.y || abs(hitDistanceVector.x) > plane.size.x)
     {
         return nullHit;
     }
@@ -374,7 +389,7 @@ void main()
 {
     vec2 uv = 2. * gl_FragCoord.xy / screenSize.xy - 1.;
 
-    Camera camera = Camera(1., cameraRotation, cameraPosition);
+    Camera camera = Camera(1.5, camera_rotation, camera_position);
     SunLight sunLight = SunLight(1., normalize(vec3(2., -1., -1.)), vec3(1.));
 
     vec3 color = vec3(0.);
@@ -382,17 +397,19 @@ void main()
     vec3 offset;
     vec3 direction;
 
+    RotationMatrixComponents rotationComponents = rotationMatrix(camera.rotation);
+    mat4 rotationTransform = rotationComponents.y * rotationComponents.x;
+
     for (int i = 0; i < MSAA * MSAA; i++)
     {
         offset = vec3(msaa.xy * i / screenSize.y, 0.);
 
-        direction = vec3(screenSize.x/screenSize.y * uv.x, uv.y, -camera.focal) + offset;
-
-        direction = (rotationMatrix(camera.rotation) * vec4(direction, 0.)).xyz;
+        direction = vec3(screenSize.x / screenSize.y * uv.x, uv.y, -camera.focal) + offset;
+        direction = (rotationTransform * vec4(direction, 0.)).xyz;
 
         Ray ray = Ray(camera.position, normalize(direction));
         color += radiance(ray, sunLight) / (MSAA * MSAA);
     }
 
-    outputColor = vec4(pow(color, vec3(1./gammaCorrection)), 1.0);
+    outputColor = vec4(pow(color, vec3(1. / gammaCorrection)), 1.0);
 }

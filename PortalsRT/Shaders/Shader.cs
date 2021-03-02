@@ -28,6 +28,11 @@ namespace PortalsRT.Shaders
             }
         }
 
+        /// <summary>
+        /// Load shader from source code.
+        /// </summary>
+        /// <param name="shaderSource">Shader source</param>
+        /// <returns>self</returns>
         public Shader SetShaderSource(string shaderSource)
         {
             ShaderSource = shaderSource;
@@ -42,13 +47,21 @@ namespace PortalsRT.Shaders
             return this;
         }
 
+        /// <summary>
+        /// Load shader from file.
+        /// </summary>
+        /// <param name="path">File path</param>
+        /// <returns>self</returns>
         public Shader SetShaderFile(string path)
         {
             SetShaderSource(File.ReadAllText(path));
             return this; 
         }
 
-
+        /// <summary>
+        /// Compile shader.
+        /// </summary>
+        /// <returns>self</returns>
         public Shader Compile()
         {
             GL.CompileShader(ID);
@@ -64,6 +77,10 @@ namespace PortalsRT.Shaders
             return this;
         }
 
+        /// <summary>
+        /// Delete shader.
+        /// </summary>
+        /// <returns>self</returns>
         public Shader Delete()
         {
             GL.DeleteShader(ID);
