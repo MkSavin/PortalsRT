@@ -9,7 +9,7 @@ namespace PortalsRT.Input
         Vector2 mouseDelta;
 
         // TODO: move to settings class
-        public Vector2 MouseSensetivity = Vector2.One;
+        public Vector2 MouseSensetivity = new Vector2(0.6f, 0.6f);
 
         public Controls(KeyboardState _keyboard, Vector2 _mouseDelta)
         {
