@@ -23,7 +23,7 @@ namespace PortalsRT.Input
             {
                 if (keyboard.IsKeyDown(key))
                 {
-                    return true;
+                    return true; 
                 }
             }
 

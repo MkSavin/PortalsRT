@@ -1,6 +1,6 @@
 #version 330
 
-#define RAY_ITERATIONS 4
+#define RAY_ITERATIONS 6
 #define MSAA 2
 
 const float gammaCorrection = 2.2;
@@ -65,6 +65,17 @@ struct Plane
     vec3 direction;
     vec3 position;
     Material material;
+};
+
+struct Portal
+{
+    Plane base;
+};
+
+struct PortalConnection
+{
+    Portal a;
+    Portal b;
 };
 
 struct Box
@@ -261,9 +272,29 @@ Hit sphereIntersection(Ray ray, Sphere sphere)
 
 //** RAYTRACING **
 
-vec3 sky(vec3 direction)
+vec3 skySimple(vec3 direction)
 {
     return vec3(0.001) * direction.y;
+}
+
+vec3 sky(Ray ray, vec3 sunDirection, bool fast)
+{
+    vec3 color = vec3(0.0);
+
+    vec3 p = ray.origin;      
+    float T = 1.;    
+    float mu = dot(sunDirection, ray.direction);
+
+	vec3 background = 6.0 * mix(vec3(0.2, 0.52, 1.0), vec3(0.8, 0.95, 1.0), pow(0.5 + 0.5 * mu, 15.0)) + mix(vec3(3.5), vec3(0.0), min(1.0, 2.3 * ray.direction.y));
+
+    if(!fast)
+    {
+        background += T * vec3(1e4 * smoothstep(0.9998, 1.0, mu));
+    }
+
+    color += background * T;
+    
+    return color * 0.022;
 }
 
 Hit sceneIntersection(Ray ray)
@@ -274,8 +305,8 @@ Hit sceneIntersection(Ray ray)
     // SPHERE
     const int spheresNumber = 2;
     Sphere spheres[spheresNumber];
-    spheres[0] = Sphere(1., vec3(0., 1., -1.), Material(vec3(1.), 0.2, 5, 0.04, 0.));
-    spheres[1] = Sphere(0.75, vec3(-1., 1., -0.5), Material(vec3(1.), 0.2, 3, 0.04, 0.));
+    spheres[0] = Sphere(1., vec3(0., 1., -1.), Material(vec3(1.), 0.2, 5, 0.02, 0.));
+    spheres[1] = Sphere(0.75, vec3(-1., 1., -0.5), Material(vec3(1., 0., 0.), 0.2, 3, 0.01, 0.));
 
     for (int i = 0; i < spheresNumber; i++)
     {
@@ -303,6 +334,9 @@ Hit sceneIntersection(Ray ray)
         }
     }
 
+    // PORTAL
+    // ...
+    
     // BOX
     const int boxesNumber = 1;
     Box boxes[boxesNumber];
@@ -328,8 +362,6 @@ Hit sceneIntersection(Ray ray)
             hit = tempHit;
         }
     }
-    // PORTAL
-    // ...
 
     return hit;
 }
@@ -376,7 +408,8 @@ vec3 radiance(Ray ray, SunLight sunLight)
         }
         else
         {
-            color += attenuation * sky(ray.direction);
+            color += attenuation * sky(ray, normalize(-sunLight.direction), false);
+            // color += attenuation * skySimple(ray.direction);
         }
     }
 
@@ -390,7 +423,7 @@ void main()
     vec2 uv = 2. * gl_FragCoord.xy / screenSize.xy - 1.;
 
     Camera camera = Camera(1.5, camera_rotation, camera_position);
-    SunLight sunLight = SunLight(1., normalize(vec3(2., -1., -1.)), vec3(1.));
+    SunLight sunLight = SunLight(1., normalize(vec3(2., -2., -1.)), vec3(1.));
 
     vec3 color = vec3(0.);
     vec2 msaa = vec2(1.) / MSAA;
