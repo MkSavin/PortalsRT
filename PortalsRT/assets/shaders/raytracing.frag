@@ -1,7 +1,9 @@
 #version 330
 
-#define RAY_ITERATIONS 6
+#define RAY_ITERATIONS 3
 #define MSAA 2
+
+#define PI 3.14159265359
 
 const float gammaCorrection = 2.2;
 const float epsilon = 4e-4;
@@ -62,7 +64,7 @@ struct Sphere
 struct Plane
 {
     vec2 size;
-    vec3 direction;
+    vec3 rotation;
     vec3 position;
     Material material;
 };
@@ -100,9 +102,11 @@ struct Hit
     vec3 position;
     vec3 normal;
     bool hitObject;
+    bool portal;
 };
 
-Hit nullHit = Hit(Material(vec3(0.), 0., 0., 0., 0.), 10000, vec3(0.), vec3(0.), false);
+Material nullMaterial = Material(vec3(0.), 0., 0., 0., 0.);
+Hit nullHit = Hit(nullMaterial, 10000, vec3(0.), vec3(0.), false, false);
 
 //** MATH **
 struct RotationMatrixComponents
@@ -171,7 +175,7 @@ Hit boxIntersection(Ray ray, Box box, out vec2 uvPosition, out int faceNumber)
     float distanceToNear = max(max(point1.x, point1.y), point1.z);
     float distanceToFar = min(min(point2.x, point2.y), point2.z);
 	
-    if( distanceToNear > distanceToFar || distanceToFar < 0.0)
+    if(distanceToNear > distanceToFar || distanceToFar < 0.0)
     {
         return nullHit;
     }
@@ -200,37 +204,46 @@ Hit boxIntersection(Ray ray, Box box, out vec2 uvPosition, out int faceNumber)
         faceNumber = (9 + int(side.z)) / 2;
     }
 
-    return Hit(box.material, distanceToNear, ray.origin + ray.direction * distanceToNear, normal, true);
+    return Hit(box.material, distanceToNear, ray.origin + ray.direction * distanceToNear, normal, true, false);
 }
 
 Hit planeIntersection(Ray ray, Plane plane)
 {
     vec3 distanceVector = plane.position - ray.origin;
 
-    if (dot(plane.direction, distanceVector) > 0.)
+    vec3 planeDirection = vec3(0., 1., 0.);
+
+    RotationMatrixComponents rotationComponents = rotationMatrix(plane.rotation);
+    mat4 rotationMatrix = rotationComponents.x * rotationComponents.y * rotationComponents.z;
+
+    planeDirection = (rotationMatrix * vec4(planeDirection, 0.)).xyz;
+
+    if (dot(planeDirection, distanceVector) > 0.)
     {
-        plane.direction *= -1;
+        planeDirection *= -1;
     }
 
-    float dotNormal = dot(plane.direction, ray.direction);
+    float dotNormal = dot(planeDirection, ray.direction);
     
     if (dotNormal > 0.)
     {
         return nullHit;
     }
 
-    float distanceTo = -dot(ray.origin, plane.direction) / dotNormal;
+    float distanceTo = dot(distanceVector, planeDirection) / dotNormal;
 
     vec3 hitPosition = ray.origin + distanceTo * ray.direction;
 
     vec3 hitDistanceVector = hitPosition - plane.position;
+
+    hitDistanceVector = (inverse(rotationMatrix) * vec4(hitDistanceVector, 0.)).xyz;
 
     if (abs(hitDistanceVector.z) > plane.size.y || abs(hitDistanceVector.x) > plane.size.x)
     {
         return nullHit;
     }
 
-    return Hit(plane.material, distanceTo, hitPosition, plane.direction, true);
+    return Hit(plane.material, distanceTo, hitPosition, planeDirection, true, false);
 }
 
 Hit sphereIntersection(Ray ray, Sphere sphere)
@@ -267,7 +280,7 @@ Hit sphereIntersection(Ray ray, Sphere sphere)
 
     vec3 hitPosition = ray.origin + distanceTo * ray.direction;
 
-    return Hit(sphere.material, distanceTo, hitPosition, (hitPosition - sphere.position) / sphere.radius, true);
+    return Hit(sphere.material, distanceTo, hitPosition, (hitPosition - sphere.position) / sphere.radius, true, false);
 }
 
 //** RAYTRACING **
@@ -305,8 +318,8 @@ Hit sceneIntersection(Ray ray)
     // SPHERE
     const int spheresNumber = 2;
     Sphere spheres[spheresNumber];
-    spheres[0] = Sphere(1., vec3(0., 1., -1.), Material(vec3(1.), 0.2, 5, 0.02, 0.));
-    spheres[1] = Sphere(0.75, vec3(-1., 1., -0.5), Material(vec3(1., 0., 0.), 0.2, 3, 0.01, 0.));
+    spheres[0] = Sphere(0.25, vec3(0., 1., -1.), Material(vec3(1.), 1., 5, 0.02, 0.));
+    spheres[1] = Sphere(0.1, vec3(-1., 1., -0.5), Material(vec3(1., 0., 0.), 1., 3, 0.01, 0.));
 
     for (int i = 0; i < spheresNumber; i++)
     {
@@ -319,10 +332,19 @@ Hit sceneIntersection(Ray ray)
     }
 
     // PLANE
-    const int planesNumber = 1;
+    Material roomMaterial = Material(vec3(1.), 0.1, 5, 0.02, 0.);
+
+    const int planesNumber = 8;
     Plane planes[planesNumber];
 
-    planes[0] = Plane(vec2(2.5), vec3(0., 1., 0.), vec3(0.), Material(vec3(1.), 0.2, 5, 0.04, 0.));
+    planes[0] = Plane(vec2(2., 4.), vec3(0.), vec3(0.), roomMaterial);
+    planes[1] = Plane(vec2(2., 2.), vec3(0.), vec3(6., 0., -2.), roomMaterial);
+    planes[2] = Plane(vec2(1., 0.5), vec3(0., 0., PI / 2), vec3(2., 1., 3.5), roomMaterial);
+    planes[3] = Plane(vec2(1., 0.5), vec3(0., 0., PI / 2), vec3(2., 1., -3.5), roomMaterial);
+    planes[4] = Plane(vec2(1., 1.), vec3(0., 0., PI / 2), vec3(2., 1., 0), roomMaterial);
+    planes[5] = Plane(vec2(1., 4.), vec3(0., 0., -PI / 2), vec3(-2., 1., 0), roomMaterial);
+    planes[6] = Plane(vec2(1., 2.), vec3(0., PI / 2, PI / 2), vec3(0., 1., -4.), roomMaterial);
+    planes[7] = Plane(vec2(1., 2.), vec3(0., -PI / 2., -PI / 2), vec3(0., 1., 4.), roomMaterial);
 
     for (int i = 0; i < planesNumber; i++)
     {
@@ -334,9 +356,6 @@ Hit sceneIntersection(Ray ray)
         }
     }
 
-    // PORTAL
-    // ...
-    
     // BOX
     const int boxesNumber = 1;
     Box boxes[boxesNumber];
@@ -351,7 +370,7 @@ Hit sceneIntersection(Ray ray)
     vec2 uvPosition;
     int faceNumber;
 
-    boxes[0] = Box(vec3(1.), vec3(0., 0., 0.), vec3(2., 0.5, 0.), Material(vec3(1.), 0.2, 5, 0.04, 0.));
+    boxes[0] = Box(vec3(0.2), vec3(0., 0., 0.), vec3(1., 0.1, 0.), Material(vec3(1.), 1., 5, 0.04, 0.));
 
     for (int i = 0; i < boxesNumber; i++)
     {
@@ -363,6 +382,34 @@ Hit sceneIntersection(Ray ray)
         }
     }
 
+    
+    // PORTAL
+    const int portalsNumber = 2;
+    Portal portals[portalsNumber];
+
+    portals[0] = Portal(
+                    Plane(vec2(0.5), vec3(0., 0., PI / 4), vec3(2.5, -1.5, 0.), nullMaterial)
+                );
+    portals[1] = Portal(
+                    Plane(vec2(0.5), vec3(0., 0., -PI / 4), vec3(-2.5, -1.5, 0.), nullMaterial)
+                );
+
+    const int portalsConnectionsNumber = 1;
+    PortalConnection portalConnections[portalsConnectionsNumber];
+
+    portalConnections[0] = PortalConnection(portals[0], portals[1]);
+
+    for (int i = 0; i < portalsNumber; i++)
+    {
+        tempHit = planeIntersection(ray, portals[i].base);
+
+        if (tempHit.hitObject && (!hit.hitObject || tempHit.distanceTo < hit.distanceTo))
+        {
+            tempHit.portal = true;
+            hit = tempHit;
+        }
+    }
+
     return hit;
 }
 
@@ -370,7 +417,7 @@ Hit sceneIntersection(Ray ray)
 // Schlick's approximation
 float fresnel(vec3 normal, vec3 rayDirection, Material material)
 {
-    return pow(1. - clamp(dot(normal, rayDirection), 0., 1.), material.specularPower) * (1. - material.specularIntensity) + material.specularIntensity;
+    return (pow(1. - clamp(dot(normal, rayDirection), 0., 1.), material.specularPower) * (1. - material.specularIntensity) + material.specularIntensity) * material.reflectionIntensity;
 }
 
 // FOR SPHERE AND SUN LIGHT
@@ -389,27 +436,38 @@ vec3 lightCast(vec3 hitPosition, vec3 normal, SunLight light)
 vec3 radiance(Ray ray, SunLight sunLight)
 {
     vec3 color = vec3(0.);
-    vec3 attenuation = vec3(1.);
+    float attenuation = 1.;
 
     for (int i = 0; i <= RAY_ITERATIONS; i++)
     {
+        if (attenuation < 1e-3)
+        {
+            continue;
+        }
+
         Hit hit = sceneIntersection(ray);
 
         if (hit.hitObject)
         {  
-            float fresnel = fresnel(hit.normal, -ray.direction, hit.material);
+            if (!hit.portal)
+            {
+                float fresnel = fresnel(hit.normal, -ray.direction, hit.material);
 
-            color += vec3(1. - fresnel) * attenuation * hit.material.color * lightCast(hit.position, hit.normal, sunLight);
-            
-            attenuation *= fresnel;
+                color += vec3(1. - fresnel) * attenuation * hit.material.color * lightCast(hit.position, hit.normal, sunLight);
+                
+                attenuation *= fresnel;
 
-            vec3 newDirection = reflect(ray.direction, hit.normal);
-            ray = Ray(hit.position + epsilon * newDirection, newDirection);
+                vec3 newDirection = reflect(ray.direction, hit.normal);
+                ray = Ray(hit.position + epsilon * newDirection, newDirection);
+            }
+            else
+            {
+                color = vec3(0.);
+            }
         }
         else
         {
             color += attenuation * sky(ray, normalize(-sunLight.direction), false);
-            // color += attenuation * skySimple(ray.direction);
         }
     }
 
