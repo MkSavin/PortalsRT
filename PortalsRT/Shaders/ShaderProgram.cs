@@ -97,6 +97,7 @@ namespace PortalsRT.Shaders
 
             if (code != (int)All.True)
             {
+                Console.WriteLine(string.Format("link program: {0}", GL.GetProgramInfoLog(ID)));
                 throw new Exception($"Error occurred whilst linking shader program ({ID})");
             }
 

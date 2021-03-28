@@ -3,7 +3,7 @@
 #define RAY_ITERATIONS 5
 #define MSAA 1
 #define SAMPLES_PER_MSAA_LEVEL 1
-#define DENOISE .97
+#define DENOISE .96
 
 #define PI 3.14159265359
 
@@ -265,14 +265,14 @@ Hit boxIntersection(Ray ray, Box box, out vec2 uvPosition, out int faceNumber)
 
 Hit planeIntersection(Ray ray, Plane plane)
 {
-    vec3 distanceVector = plane.position - ray.origin;
-
     vec3 planeDirection = vec3(0., 1., 0.);
 
     RotationMatrixComponents rotationComponents = rotationMatrix(plane.rotation);
     mat4 rotationMatrix = rotationComponents.x * rotationComponents.y * rotationComponents.z;
 
     planeDirection = (rotationMatrix * vec4(planeDirection, 0.)).xyz;
+
+    vec3 distanceVector = plane.position - ray.origin;
 
     if (dot(planeDirection, distanceVector) > 0.)
     {
@@ -363,11 +363,22 @@ vec3 sky(Ray ray, vec3 sunDirection, bool fast)
 
     color += background * T;
     
-    return clamp(color * 0.022, 0., 1.);
+    return clamp(color * 0.085, 0., 1.);
 }
 
-Hit sceneIntersection(Ray ray)
+const int portalsNumber = 2;
+Portal portals[portalsNumber];
+
+Portal nullPortal = Portal(Plane(vec2(0.), vec3(0.), vec3(0.), nullMaterial));
+
+const int portalsConnectionsNumber = 1;
+PortalConnection portalConnections[portalsConnectionsNumber];
+
+PortalConnection nullPortalConnection = PortalConnection(nullPortal, nullPortal);
+
+Hit sceneIntersection(Ray ray, out Portal lastHittedPortal)
 {
+    lastHittedPortal = nullPortal;
     Hit hit = nullHit;
     Hit tempHit = nullHit;
 
@@ -439,20 +450,13 @@ Hit sceneIntersection(Ray ray)
         }
     }
 
-    
     // PORTAL
-    const int portalsNumber = 2;
-    Portal portals[portalsNumber];
-
     portals[0] = Portal(
-                    Plane(vec2(0.5), vec3(0., 0., PI / 4), vec3(2.5, -1.5, 0.), nullMaterial)
+                    Plane(vec2(1.), vec3(PI, 0., PI / 2), vec3(2., 1., 2.), nullMaterial)
                 );
     portals[1] = Portal(
-                    Plane(vec2(0.5), vec3(0., 0., -PI / 4), vec3(-2.5, -1.5, 0.), nullMaterial)
+                    Plane(vec2(1.), vec3(0., 0., PI / 2), vec3(2., 1., -2.), nullMaterial)
                 );
-
-    const int portalsConnectionsNumber = 1;
-    PortalConnection portalConnections[portalsConnectionsNumber];
 
     portalConnections[0] = PortalConnection(portals[0], portals[1]);
 
@@ -462,6 +466,7 @@ Hit sceneIntersection(Ray ray)
 
         if (tempHit.hitObject && (!hit.hitObject || tempHit.distanceTo < hit.distanceTo))
         {
+            lastHittedPortal = portals[i];
             tempHit.portal = true;
             hit = tempHit;
         }
@@ -481,7 +486,8 @@ float fresnel(vec3 normal, vec3 rayDirection, Material material)
 vec3 lightCast(vec3 hitPosition, vec3 normal, SunLight light)
 {
     Ray ray = Ray(hitPosition + epsilon * -light.direction, -light.direction);
-    Hit shadowHit = sceneIntersection(ray);
+    Portal portal;
+    Hit shadowHit = sceneIntersection(ray, portal);
 
     if (!shadowHit.hitObject)
     {
@@ -525,12 +531,80 @@ mat3 onb(vec3 normal)
 	return ret;
 }
 
+Portal findTargetPortal(Portal basePortal)
+{
+    Portal targetPortal = nullPortal;
+    PortalConnection basePortalConnection = nullPortalConnection;
+
+    if (basePortal != nullPortal)
+    {
+        for (int p = 0; p < portalsConnectionsNumber; p++)
+        {
+            if (portalConnections[p].a == basePortal || portalConnections[p].b == basePortal)
+            {
+                basePortalConnection = portalConnections[p];
+                continue;
+            }
+        }
+
+        if (basePortalConnection != nullPortalConnection)
+        {
+            if (basePortalConnection.a == basePortal)
+            {
+                targetPortal = basePortalConnection.b;
+            }
+            else
+            {
+                targetPortal = basePortalConnection.a;
+            }
+        }
+    }
+
+    return targetPortal;
+}
+
+Ray portalizeHittedRay(Ray ray, Hit hit, Portal basePortal, Portal targetPortal)
+{
+    // Transform hit position and ray direction to local of first (base) portal
+    RotationMatrixComponents rotationComponents = rotationMatrix(basePortal.base.rotation);
+    mat4 transformRotationMatrix = rotationComponents.x * rotationComponents.y * rotationComponents.z;
+
+    vec3 newDirection = (transformRotationMatrix * vec4(ray.direction, 0.)).xyz;
+
+    hit.position -= basePortal.base.position;
+
+    vec3 relativeHitPosition = (transformRotationMatrix * vec4(hit.position, 0.)).xyz;
+    relativeHitPosition /= vec3(basePortal.base.size, 1.);
+
+    // Transform hit position and ray direction to absolute by using second (target) portal transform
+
+    rotationComponents = rotationMatrix(targetPortal.base.rotation);
+    transformRotationMatrix = rotationComponents.x * rotationComponents.y * rotationComponents.z;
+
+    vec3 relativeRayOrigin = relativeHitPosition * vec3(targetPortal.base.size, 1.);
+    relativeRayOrigin = (inverse(transformRotationMatrix) * vec4(relativeRayOrigin, 0.)).xyz;
+
+    vec3 absoluteRayOrigin = relativeRayOrigin + targetPortal.base.position;
+
+    newDirection = (inverse(transformRotationMatrix) * vec4(newDirection, 0.)).xyz;
+
+    // Return ray
+
+    return Ray(absoluteRayOrigin + epsilon * newDirection, newDirection);
+}
+
 vec3 radiance(Ray ray, SunLight sunLight)
 {
     vec3 backBrdf = vec3(1.);
     vec3 color = vec3(0.);
     vec3 tempColor = vec3(0.);
     float attenuation = 1.;
+
+    bool stopIterations = false;
+
+    Portal lastPortal;
+    Portal targetPortal;
+    PortalConnection lastPortalConnection = nullPortalConnection;
 
     for (int i = 0; i <= RAY_ITERATIONS; i++)
     {
@@ -539,7 +613,12 @@ vec3 radiance(Ray ray, SunLight sunLight)
         //     continue;
         // }
 
-        Hit hit = sceneIntersection(ray);
+        if (stopIterations)
+        {
+            break;
+        }
+
+        Hit hit = sceneIntersection(ray, lastPortal);
 
         if (hit.hitObject)
         {  
@@ -585,12 +664,25 @@ vec3 radiance(Ray ray, SunLight sunLight)
             }
             else
             {
-                color = vec3(0.);
+                // Error color
+                tempColor = vec3(1., 0., 0.);
+                stopIterations = true;
+
+                if ((targetPortal = findTargetPortal(lastPortal)) != nullPortal)
+                {
+                    ray = portalizeHittedRay(ray, hit, lastPortal, targetPortal);
+
+                    tempColor = vec3(0.);
+                    stopIterations = false;
+                }
+
+                color += tempColor;//vec3(0.);
             }
         }
         else
         {
             color += attenuation * sky(ray, normalize(-sunLight.direction), false);
+            stopIterations = true;
         }
     }
 

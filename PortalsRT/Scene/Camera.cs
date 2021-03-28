@@ -9,6 +9,7 @@ using PortalsRT.Input;
 using PortalsRT.Logic;
 using PortalsRT.Mathematics;
 using PortalsRT.Mathematics.Vector;
+using PortalsRT.Scene.Objects;
 using PortalsRT.Shaders;
 
 namespace PortalsRT.Scene
@@ -19,6 +20,14 @@ namespace PortalsRT.Scene
 
         public Vector3 relativeVelocity = Vector3.Zero;
 
+        public Vector3 AbsoluteVelocity { 
+            get
+            {
+                return relativeVelocity * AbsoluteToRelativeRotationMatrix().Inverted();
+            }
+        }
+
+        public float boundsSphereRadius = 0.1f;
         public float speed = 0.3F;
 
         public bool CameraMoved { get; private set; } = false;
@@ -54,16 +63,91 @@ namespace PortalsRT.Scene
 
             transform.rotation += controls.GetLookUpInputDirection() * (float)Game.DeltaTime;
 
-            transform.rotation.X = Helpers.Clamp(transform.rotation.X, (float) -Math.PI / 2, (float) Math.PI / 2);
+            transform.rotation.X = Helpers.Clamp(transform.rotation.X, (float)-Math.PI / 2, (float)Math.PI / 2);
 
             CameraMoved = controls.IsInputActive() || relativeVelocity.LengthFast > 1e-5;
         }
 
-        public void ProcessPhysics() 
+        public void ProcessPhysics(List<SceneObject> sceneObjects) 
         {
-            transform.position += relativeVelocity * AbsoluteToRelativeRotationMatrix().Inverted();
+            transform.position += AbsoluteVelocity;
 
             relativeVelocity /= 1.1F;
+
+            if (relativeVelocity.Length < 1e-3)
+            {
+                relativeVelocity = Vector3.Zero;
+            }
+
+            List<Portal> portals = new List<Portal>();
+
+            foreach (var sceneObject in sceneObjects)
+            {
+                if (sceneObject is Portal)
+                {
+                    portals.Add(sceneObject as Portal);
+                }
+            }
+
+            Console.SetCursorPosition(0, 0);
+            Console.WriteLine("                                               ");
+            Console.WriteLine("                                               ");
+            Console.WriteLine("                                               ");
+
+            foreach (var portal in portals)
+            {
+                // Determine that camera is colliding portal and velocity vector is opposite of portal normal
+                // Camera distance vector and rotation to portalspace (portal localspace)
+                Matrix3 portalspaceRotationTransform = portal.transform.TransformRotationMatrix();
+                Vector3 distanceVector = portal.transform.position - transform.position;
+                Vector3 portalNormalizedSize = portal.NormalizedSize();
+
+                distanceVector *= portalspaceRotationTransform;
+
+                distanceVector += portalNormalizedSize / 2;
+
+                if (portal.IsPointInBounds(distanceVector))
+                {
+                    Vector3 portalspaceVelocity = AbsoluteVelocity * portalspaceRotationTransform.Inverted();
+
+                    // Vector3.UnitY is normal of portal in portalspace
+                    if (Vector3.Dot(portalspaceVelocity, Vector3.UnitY) < 0)
+                    {
+                        // TODO: Check: Vector3.Dot(distanceVector, Vector3.UnitY) > 0
+
+                        Vector3 positionRelativeToPortalSize = new Vector3(distanceVector.X / portalNormalizedSize.X, 0, distanceVector.Z / portalNormalizedSize.Z);
+
+                        var invertDirection = Vector3.UnitX * portalspaceRotationTransform;
+                        invertDirection.Z = invertDirection.Y;
+                        invertDirection.Y = 0;
+
+                        var invertedRelativePosition = Vector3.One - positionRelativeToPortalSize;
+                        positionRelativeToPortalSize += (invertedRelativePosition - positionRelativeToPortalSize) * invertDirection;
+
+                        var targetPortal = portal.targetPortal;
+
+                        portalNormalizedSize = targetPortal.NormalizedSize();
+
+                        positionRelativeToPortalSize *= portalNormalizedSize;
+                        positionRelativeToPortalSize.Y = 1e-2f;
+
+                        distanceVector = positionRelativeToPortalSize - portalNormalizedSize / 2;
+
+                        Vector3 portalspaceCameraRotation = transform.rotation * portalspaceRotationTransform;
+
+                        portalspaceRotationTransform = targetPortal.transform.TransformRotationMatrix();
+
+                        distanceVector *= portalspaceRotationTransform.Inverted();
+
+                        transform.position = targetPortal.transform.position - distanceVector;
+                        transform.rotation = portalspaceCameraRotation * portalspaceRotationTransform.Inverted() + Vector3.UnitY * (float)Math.PI;
+
+                        Console.SetCursorPosition(0, 0);
+                        Console.WriteLine(invertDirection);
+
+                    }
+                }
+            }
         }
     }
 }

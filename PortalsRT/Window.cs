@@ -99,6 +99,7 @@ namespace PortalsRT
 
                 watch.Stop();
                 Game.DeltaTime = watch.ElapsedMilliseconds / 1000F;
+                Title = $"Portals RT. FPS: {1 / Game.DeltaTime}";
                 watch.Restart();
 
                 Frame++;

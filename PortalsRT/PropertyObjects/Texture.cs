@@ -34,7 +34,7 @@ namespace PortalsRT.PropertyObjects
             }
 
             var bmp = new Bitmap(location);
-            var bmpdata = bmp.LockBits(new Rectangle(0, 0, bmp.Width, bmp.Height), ImageLockMode.ReadOnly, System.Drawing.Imaging.PixelFormat.Format24bppRgb);
+            var bmpdata = bmp.LockBits(new Rectangle(0, 0, bmp.Width, bmp.Height), ImageLockMode.ReadOnly, PixelFormat.Format24bppRgb);
             bmp.UnlockBits(bmpdata);
 
             return bmpdata;
