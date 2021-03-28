@@ -4,6 +4,7 @@ using System.IO;
 
 using OpenTK.Graphics.OpenGL;
 using OpenTK.Mathematics;
+using PortalsRT.Input;
 
 namespace PortalsRT.Shaders
 {
@@ -16,15 +17,15 @@ namespace PortalsRT.Shaders
 
         public string ShaderSource { get; private set; } = "";
 
-        public Shader(ShaderType shaderType, string file = null)
+        public Shader(ShaderType shaderType, Asset asset = null)
         {
             Type = shaderType;
 
             ID = GL.CreateShader(Type);
 
-            if (file != null)
+            if (asset != null && asset.Exists())
             {
-                SetShaderFile(file);
+                SetShaderAsset(asset);
             }
         }
 
@@ -52,9 +53,9 @@ namespace PortalsRT.Shaders
         /// </summary>
         /// <param name="path">File path</param>
         /// <returns>self</returns>
-        public Shader SetShaderFile(string path)
+        public Shader SetShaderAsset(Asset asset)
         {
-            SetShaderSource(File.ReadAllText(path));
+            SetShaderSource(asset.Text());
             return this; 
         }
 
@@ -86,7 +87,5 @@ namespace PortalsRT.Shaders
             GL.DeleteShader(ID);
             return this;
         }
-
-
     }
 }

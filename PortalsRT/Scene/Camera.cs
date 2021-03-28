@@ -21,17 +21,20 @@ namespace PortalsRT.Scene
 
         public float speed = 0.3F;
 
+        public bool CameraMoved { get; private set; } = false;
+
         public bool IsPerspective { get; set; } = true;
 
         public Camera(Transform _transform = null)
         {
             transform = _transform ?? Transform.Zero;
         }
-        
+
         public void UploadTransformToShader(ShaderProgram shader)
         {
             shader.SetVector3("camera_position", transform.position);
             shader.SetVector3("camera_rotation", transform.rotation);
+            shader.SetInt("camera_moved", CameraMoved ? 1 : 0);
         }
 
         public Matrix3 AbsoluteToRelativeRotationMatrix()
@@ -52,6 +55,8 @@ namespace PortalsRT.Scene
             transform.rotation += controls.GetLookUpInputDirection() * (float)Game.DeltaTime;
 
             transform.rotation.X = Helpers.Clamp(transform.rotation.X, (float) -Math.PI / 2, (float) Math.PI / 2);
+
+            CameraMoved = controls.IsInputActive() || relativeVelocity.LengthFast > 1e-5;
         }
 
         public void ProcessPhysics() 

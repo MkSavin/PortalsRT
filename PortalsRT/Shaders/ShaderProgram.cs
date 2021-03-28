@@ -4,6 +4,7 @@ using System.Text;
 
 using OpenTK.Graphics.OpenGL;
 using OpenTK.Mathematics;
+using PortalsRT.PropertyObjects;
 
 namespace PortalsRT.Shaders
 {
@@ -295,6 +296,34 @@ namespace PortalsRT.Shaders
         }
 
         /// <summary>
+        /// Set a uniform Sampler2D on this shader program.
+        /// </summary>
+        /// <param name="name">The name of the uniform</param>
+        /// <param name="texture">The data to set</param>
+        /// <param name="unit">The texture unit in layout</param>
+        public ShaderProgram SetTexture(string name, int texture, TextureUnit unit = TextureUnit.Texture0, int handle = 0)
+        {
+            PrepareProgramForUniform(name);
+            GL.Uniform1(uniforms[name], handle);
+
+            return this;
+        }
+
+        /// <summary>
+        /// Set a uniform Sampler2D on this shader program.
+        /// </summary>
+        /// <param name="name">The name of the uniform</param>
+        /// <param name="texture">The data to set</param>
+        /// <param name="unit">The texture unit in layout</param>
+        public ShaderProgram SetTexture(string name, Texture texture, TextureUnit unit = TextureUnit.Texture0, int handle = 0)
+        {
+            PrepareProgramForUniform(name);
+            GL.Uniform1(uniforms[name], handle);
+
+            return this;
+        }
+
+        /// <summary>
         /// Set a uniform Vector3 on this shader program.
         /// </summary>
         /// <param name="name">The name of the uniform</param>
@@ -303,6 +332,19 @@ namespace PortalsRT.Shaders
         {
             PrepareProgramForUniform(name);
             GL.Uniform3(uniforms[name], data);
+
+            return this;
+        }
+
+        /// <summary>
+        /// Set a uniform Vector3 on this shader program.
+        /// </summary>
+        /// <param name="name">The name of the uniform</param>
+        /// <param name="data">The data to set</param>
+        public ShaderProgram SetFloatArray(string name, List<float> data)
+        {
+            PrepareProgramForUniform(name);
+            GL.Uniform3(uniforms[name], data.Count, data.ToArray());
 
             return this;
         }

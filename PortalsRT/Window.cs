@@ -12,12 +12,16 @@ using OpenTK.Windowing.GraphicsLibraryFramework;
 using PortalsRT.Shaders;
 using PortalsRT.Input;
 using PortalsRT.Logic;
+using PortalsRT.PropertyObjects;
 
 namespace PortalsRT
 {
     public class Window : GameWindow
     {
         Stopwatch watch;
+        public int Frame { get; private set; } = 0;
+
+        private int framebufferTexture = 0;
 
         // NDC, (0, 0) at center
         private readonly float[] vertices =
@@ -34,6 +38,8 @@ namespace PortalsRT
 
         private ShaderProgram shader;
 
+        private Texture noise;
+
         public Window(GameWindowSettings gameWindowSettings, NativeWindowSettings nativeWindowSettings)
             : base(gameWindowSettings, nativeWindowSettings)
         {
@@ -43,6 +49,7 @@ namespace PortalsRT
         protected override void OnLoad()
         {
             GL.ClearColor(Color.Black);
+            GL.Enable(EnableCap.Texture2D);
 
             vertexBufferObject = GL.GenBuffer();
             GL.BindBuffer(BufferTarget.ArrayBuffer, vertexBufferObject);
@@ -57,14 +64,29 @@ namespace PortalsRT
             GL.EnableVertexAttribArray(layoutLocation);
 
             shader = new ShaderProgram()
-              .AddShader(new Shader(ShaderType.VertexShader, "assets/shaders/raytracing.vert"))
-              .AddShader(new Shader(ShaderType.FragmentShader, "assets/shaders/raytracing.frag"))
+              .AddShader(new Shader(ShaderType.VertexShader, new Asset("shaders/raytracing.vert")))
+              .AddShader(new Shader(ShaderType.FragmentShader, new Asset("shaders/raytracing.frag")))
               .FullLink();
 
             shader.Use();
 
             CursorGrabbed = true;
-            // CursorVisible = false;
+
+            framebufferTexture = GL.GenTexture();
+            GL.BindTexture(TextureTarget.Texture2D, framebufferTexture);
+
+            GL.TexParameter(TextureTarget.Texture2D, TextureParameterName.TextureMagFilter, (int)TextureMagFilter.Nearest);
+            GL.TexParameter(TextureTarget.Texture2D, TextureParameterName.TextureMinFilter, (int)TextureMinFilter.Nearest);
+
+            GL.TexImage2D(TextureTarget.Texture2D, 0, PixelInternalFormat.Rgb, Size.X, Size.Y, 0, PixelFormat.Rgb, PixelType.UnsignedByte, IntPtr.Zero);
+
+            noise = new Texture(new Asset("textures/noise.bmp"));
+            AssetLoader.LoadTexture(noise);
+
+            GL.ActiveTexture(TextureUnit.Texture1);
+            GL.BindTexture(TextureTarget.Texture2D, noise.ID);
+
+            shader.SetTexture("bluenoiseMask", noise, TextureUnit.Texture1, 1);
 
             base.OnLoad();
         }
@@ -79,10 +101,19 @@ namespace PortalsRT
                 Game.DeltaTime = watch.ElapsedMilliseconds / 1000F;
                 watch.Restart();
 
+                Frame++;
+                shader.SetInt("frameNumber", Frame);
+                shader.SetTexture("accumTexture", framebufferTexture, TextureUnit.Texture0, 0);
+
+                GL.ActiveTexture(TextureUnit.Texture0);
+                GL.BindTexture(TextureTarget.Texture2D, framebufferTexture);
+
                 callback.Invoke(Game.DeltaTime, shader);
 
                 GL.BindVertexArray(vertexArrayObject);
                 GL.DrawArrays(PrimitiveType.TriangleStrip, 0, 5);
+
+                GL.CopyTexImage2D(TextureTarget.Texture2D, 0, InternalFormat.Rgb, 0, 0, Size.X, Size.Y, 0);
 
                 SwapBuffers();
             };

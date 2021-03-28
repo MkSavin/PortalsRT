@@ -20,8 +20,13 @@ D:\Dev\Vs\PortalsRT\PortalsRT\bin\Debug\netcoreapp3.1\runtimes\linux-x64\native\
 D:\Dev\Vs\PortalsRT\PortalsRT\bin\Debug\netcoreapp3.1\runtimes\osx-x64\native\libglfw.3.dylib
 D:\Dev\Vs\PortalsRT\PortalsRT\bin\Debug\netcoreapp3.1\runtimes\win-x64\native\glfw3.dll
 D:\Dev\Vs\PortalsRT\PortalsRT\bin\Debug\netcoreapp3.1\runtimes\win-x86\native\glfw3.dll
-D:\Dev\Vs\PortalsRT\PortalsRT\obj\Debug\netcoreapp3.1\PortalsRT.csproj.CoreCompileInputs.cache
 D:\Dev\Vs\PortalsRT\PortalsRT\obj\Debug\netcoreapp3.1\PortalsRT.csproj.CopyComplete
 D:\Dev\Vs\PortalsRT\PortalsRT\obj\Debug\netcoreapp3.1\PortalsRT.dll
 D:\Dev\Vs\PortalsRT\PortalsRT\obj\Debug\netcoreapp3.1\PortalsRT.pdb
 D:\Dev\Vs\PortalsRT\PortalsRT\obj\Debug\netcoreapp3.1\PortalsRT.genruntimeconfig.cache
+D:\Dev\Vs\PortalsRT\PortalsRT\bin\Debug\netcoreapp3.1\Microsoft.Win32.SystemEvents.dll
+D:\Dev\Vs\PortalsRT\PortalsRT\bin\Debug\netcoreapp3.1\System.Drawing.Common.dll
+D:\Dev\Vs\PortalsRT\PortalsRT\bin\Debug\netcoreapp3.1\runtimes\win\lib\netcoreapp3.0\Microsoft.Win32.SystemEvents.dll
+D:\Dev\Vs\PortalsRT\PortalsRT\bin\Debug\netcoreapp3.1\runtimes\unix\lib\netcoreapp3.0\System.Drawing.Common.dll
+D:\Dev\Vs\PortalsRT\PortalsRT\bin\Debug\netcoreapp3.1\runtimes\win\lib\netcoreapp3.0\System.Drawing.Common.dll
+D:\Dev\Vs\PortalsRT\PortalsRT\obj\Debug\netcoreapp3.1\PortalsRT.csproj.CoreCompileInputs.cache

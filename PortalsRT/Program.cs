@@ -31,7 +31,7 @@ namespace PortalsRT
                 window.Render((deltaTick, shader) => {
 
                     // StatBar.Write();
-
+                    
                     Camera.Instance.ProcessInput(window.KeyboardState, window.MouseState.Delta);
                     Camera.Instance.ProcessPhysics();
                     Camera.Instance.UploadTransformToShader(shader);

@@ -17,6 +17,11 @@ namespace PortalsRT.Input
             mouseDelta = _mouseDelta;
         }
 
+        public bool IsInputActive()
+        {
+            return keyboard.IsAnyKeyDown || mouseDelta.LengthFast > 0.1;
+        }
+
         public bool OneOfKeysDown(params Keys[] keys)
         {
             foreach (var key in keys)

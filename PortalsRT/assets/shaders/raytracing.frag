@@ -1,21 +1,77 @@
-#version 330
+#version 420
 
-#define RAY_ITERATIONS 3
-#define MSAA 2
+#define RAY_ITERATIONS 5
+#define MSAA 1
+#define SAMPLES_PER_MSAA_LEVEL 1
+#define DENOISE .97
 
 #define PI 3.14159265359
 
 const float gammaCorrection = 2.2;
 const float epsilon = 4e-4;
 
+uniform int frameNumber;
 uniform vec3 screenSize;
+uniform bool camera_moved;
 uniform vec3 camera_rotation;
 uniform vec3 camera_position;
+layout(binding=0) uniform sampler2D accumTexture;
+layout(binding=1) uniform sampler2D bluenoiseMask;
 
-out vec4 outputColor;
+layout(location = 0) out vec4 outputColor;
+
+//** Math **
+float seed = 0;
+
+float bluenoise(vec2 uv)
+{
+    uv += 12.2130 * vec2(frameNumber);
+    return texture(bluenoiseMask, (uv + 0.5) / vec2(192.).xy, 0.0).x;
+}
+
+lowp float hash1() {
+    return fract(sin(seed += 0.1) * 43758.5453123);
+}
+
+lowp vec2 hash2() {
+    return fract(sin(vec2(seed += 0.1, seed += 0.1)) * vec2(43758.5453123, 22578.1459123));
+}
+
+lowp vec3 hash3() {
+    return fract(sin(vec3(seed += 0.1, seed += 0.1, seed += 0.1)) * vec3(43758.5453123, 22578.1459123, 19642.3490423));
+}
+
+/*
+int flatIdx = 0;
+
+void teaEncryption(inout uvec2 arg)
+{
+	uvec4 key = uvec4(0xa341316c, 0xc8013ea4, 0xad90777d, 0x7e95761e);
+	uint v0 = arg[0], v1 = arg[1];
+	uint sum = 0u;
+	uint delta = 0x9e3779b9u;
+
+	for(int i = 0; i < 32; i++) {
+		sum += delta;
+		v0 += ((v1 << 4) + key[0]) ^ (v1 + sum) ^ ((v1 >> 5) + key[1]);
+		v1 += ((v0 << 4) + key[2]) ^ (v0 + sum) ^ ((v0 >> 5) + key[3]);
+	}
+
+	arg[0] = v0;
+	arg[1] = v1;
+}
+
+vec2 random()
+{
+    uvec2 arg = uvec2(flatIdx, seed++);
+
+    teaEncryption(arg);
+
+    return fract(vec2(arg) / vec2(0xffffffffu));
+}
+*/
 
 //** Scene **
-
 
 //** Properties **
 struct Material
@@ -307,7 +363,7 @@ vec3 sky(Ray ray, vec3 sunDirection, bool fast)
 
     color += background * T;
     
-    return color * 0.022;
+    return clamp(color * 0.022, 0., 1.);
 }
 
 Hit sceneIntersection(Ray ray)
@@ -318,7 +374,7 @@ Hit sceneIntersection(Ray ray)
     // SPHERE
     const int spheresNumber = 2;
     Sphere spheres[spheresNumber];
-    spheres[0] = Sphere(0.25, vec3(0., 1., -1.), Material(vec3(1.), 1., 5, 0.02, 0.));
+    spheres[0] = Sphere(0.25, vec3(0., 1., -1.), Material(vec3(1.), 1., 5, 0.2, 0.));
     spheres[1] = Sphere(0.1, vec3(-1., 1., -0.5), Material(vec3(1., 0., 0.), 1., 3, 0.01, 0.));
 
     for (int i = 0; i < spheresNumber; i++)
@@ -332,7 +388,7 @@ Hit sceneIntersection(Ray ray)
     }
 
     // PLANE
-    Material roomMaterial = Material(vec3(1.), 0.1, 5, 0.02, 0.);
+    Material roomMaterial = Material(vec3(1.), 0., 5, 0.2, 0.);
 
     const int planesNumber = 8;
     Plane planes[planesNumber];
@@ -357,7 +413,7 @@ Hit sceneIntersection(Ray ray)
     }
 
     // BOX
-    const int boxesNumber = 1;
+    const int boxesNumber = 2;
     Box boxes[boxesNumber];
 
     /*
@@ -370,7 +426,8 @@ Hit sceneIntersection(Ray ray)
     vec2 uvPosition;
     int faceNumber;
 
-    boxes[0] = Box(vec3(0.2), vec3(0., 0., 0.), vec3(1., 0.1, 0.), Material(vec3(1.), 1., 5, 0.04, 0.));
+    boxes[0] = Box(vec3(1.), vec3(0., 0., 0.), vec3(0.4, 0.5, 0.), Material(vec3(1., 1., 0.), 1., 5, 0.04, 0.));
+    boxes[1] = Box(vec3(1.), vec3(0., 0., 0.), vec3(0.2, 0.5, 1.2), Material(vec3(1., 0., 1.), 1., 5, 0.04, 0.));
 
     for (int i = 0; i < boxesNumber; i++)
     {
@@ -417,13 +474,14 @@ Hit sceneIntersection(Ray ray)
 // Schlick's approximation
 float fresnel(vec3 normal, vec3 rayDirection, Material material)
 {
-    return (pow(1. - clamp(dot(normal, rayDirection), 0., 1.), material.specularPower) * (1. - material.specularIntensity) + material.specularIntensity) * material.reflectionIntensity;
+    return pow(1. - clamp(dot(normal, rayDirection), 0., 1.), material.specularPower) * (1. - material.specularIntensity) + material.specularIntensity;
 }
 
 // FOR SPHERE AND SUN LIGHT
 vec3 lightCast(vec3 hitPosition, vec3 normal, SunLight light)
 {
-    Hit shadowHit = sceneIntersection(Ray(hitPosition + epsilon * -light.direction, -light.direction));
+    Ray ray = Ray(hitPosition + epsilon * -light.direction, -light.direction);
+    Hit shadowHit = sceneIntersection(ray);
 
     if (!shadowHit.hitObject)
     {
@@ -433,17 +491,53 @@ vec3 lightCast(vec3 hitPosition, vec3 normal, SunLight light)
     return vec3(0.);
 }
 
+vec2 sampleDisk(vec2 uv)
+{
+	float theta = 2.0 * PI * uv.x;
+	float r = sqrt(uv.y);
+	return vec2(cos(theta), sin(theta)) * r;
+}
+
+vec3 cosHemisphere(vec2 uv)
+{
+	vec2 disk = sampleDisk(uv);
+	return vec3(disk.x, sqrt(max(0.0, 1.0 - dot(disk, disk))), disk.y);
+}
+
+mat3 onb(vec3 normal)
+{
+	mat3 ret;
+	ret[1] = normal;
+
+	if(normal.z < -0.999805696) 
+    {
+		ret[0] = vec3(0.0, -1.0, 0.0);
+		ret[2] = vec3(-1.0, 0.0, 0.0);
+	} 
+    else 
+    {
+		float a = 1.0 / (1.0 + normal.z);
+		float b = -normal.x * normal.y * a;
+		ret[0] = vec3(1.0 - normal.x * normal.x * a, b, -normal.x);
+		ret[2] = vec3(b, 1.0 - normal.y * normal.y * a, -normal.y);
+	}
+    
+	return ret;
+}
+
 vec3 radiance(Ray ray, SunLight sunLight)
 {
+    vec3 backBrdf = vec3(1.);
     vec3 color = vec3(0.);
+    vec3 tempColor = vec3(0.);
     float attenuation = 1.;
 
     for (int i = 0; i <= RAY_ITERATIONS; i++)
     {
-        if (attenuation < 1e-3)
-        {
-            continue;
-        }
+        // if (attenuation < 1e-3)
+        // {
+        //     continue;
+        // }
 
         Hit hit = sceneIntersection(ray);
 
@@ -451,14 +545,43 @@ vec3 radiance(Ray ray, SunLight sunLight)
         {  
             if (!hit.portal)
             {
-                float fresnel = fresnel(hit.normal, -ray.direction, hit.material);
+                tempColor = hit.material.color;
 
-                color += vec3(1. - fresnel) * attenuation * hit.material.color * lightCast(hit.position, hit.normal, sunLight);
+                float currentFresnel = fresnel(hit.normal, -ray.direction, hit.material);
+
+                vec3 brdf = tempColor;// / PI;
+
+                tempColor = vec3(1. - currentFresnel) * brdf * backBrdf * attenuation * lightCast(hit.position, hit.normal, sunLight);
                 
-                attenuation *= fresnel;
+                attenuation *= currentFresnel;
 
-                vec3 newDirection = reflect(ray.direction, hit.normal);
-                ray = Ray(hit.position + epsilon * newDirection, newDirection);
+                vec3 bsdfDirection = reflect(ray.direction, hit.normal);
+                ray = Ray(hit.position + epsilon * bsdfDirection, bsdfDirection);
+
+                {  //brdf 
+                    mat3 currentOnb = onb(hit.normal);
+                    bsdfDirection = mix(normalize(currentOnb * cosHemisphere(hash2())), bsdfDirection, hit.material.reflectionIntensity);
+                    // bsdfDirection = normalize(currentOnb * cosHemisphere(random()));
+
+                    Ray nextRay = Ray(hit.position + epsilon * bsdfDirection, bsdfDirection);
+
+                    // hit = sceneIntersection(nextRay);
+
+                    // if (!hit.hitObject)
+                    // {
+                    //     break;
+                    // }
+                    
+                    // currentFresnel = fresnel(hit.normal, -ray.direction, hit.material);
+                    backBrdf *= brdf;
+
+                    // attenuation *= currentFresnel;
+
+                    ray = nextRay;
+                    //color += attenuation * hit.material.color;
+                }
+
+                color += tempColor;
             }
             else
             {
@@ -471,7 +594,7 @@ vec3 radiance(Ray ray, SunLight sunLight)
         }
     }
 
-    return color;
+    return clamp(color, 0., 1.);
 }
 
 //** MAIN **
@@ -483,24 +606,48 @@ void main()
     Camera camera = Camera(1.5, camera_rotation, camera_position);
     SunLight sunLight = SunLight(1., normalize(vec3(2., -2., -1.)), vec3(1.));
 
+    //flatIdx = int(dot(gl_FragCoord.xy, vec2(1, 4096)));
+    seed = bluenoise(gl_FragCoord.xy);
+
     vec3 color = vec3(0.);
     vec2 msaa = vec2(1.) / MSAA;
+    vec2 rnd;
     vec3 offset;
     vec3 direction;
+    vec2 screenspaceDirection;
 
     RotationMatrixComponents rotationComponents = rotationMatrix(camera.rotation);
     mat4 rotationTransform = rotationComponents.y * rotationComponents.x;
 
     for (int i = 0; i < MSAA * MSAA; i++)
     {
-        offset = vec3(msaa.xy * i / screenSize.y, 0.);
+        for (int j = 0; j < SAMPLES_PER_MSAA_LEVEL; j++)
+        {
+            offset = vec3(msaa.xy * i / screenSize.y, 0.);
 
-        direction = vec3(screenSize.x / screenSize.y * uv.x, uv.y, -camera.focal) + offset;
-        direction = (rotationTransform * vec4(direction, 0.)).xyz;
+            rnd = hash2();
 
-        Ray ray = Ray(camera.position, normalize(direction));
-        color += radiance(ray, sunLight) / (MSAA * MSAA);
+            screenspaceDirection = vec2(screenSize.x / screenSize.y * uv.x, uv.y);
+            direction = vec3(screenspaceDirection + rnd.x * dFdx(uv) + rnd.y * dFdy(uv), -camera.focal) + offset;// + vec3(rnd / 1000, 0);
+            direction = (rotationTransform * vec4(direction, 0.)).xyz;
+
+            Ray ray = Ray(camera.position, normalize(direction));
+            color += radiance(ray, sunLight);
+
+            seed = mod(seed * 1.1234567893490423, 13.);
+        }
+    }
+    
+    color = pow(color / (MSAA * MSAA) / float(SAMPLES_PER_MSAA_LEVEL), vec3(1. / gammaCorrection));
+
+    vec3 accumColor = texture(accumTexture, gl_FragCoord.xy / screenSize.xy).xyz;
+
+    if (frameNumber > 0 && !camera_moved)
+    {
+        color = color * (1. - DENOISE) + accumColor * DENOISE;
     }
 
-    outputColor = vec4(pow(color, vec3(1. / gammaCorrection)), 1.0);
+    // color *= 0.5 + 0.5 * pow(16.0 * uv.x * uv.y * (1.0 - uv.x) * (1.0 - uv.y), 0.1);  
+
+    outputColor = vec4(color, 1.0);
 }
