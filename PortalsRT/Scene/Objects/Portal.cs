@@ -22,7 +22,7 @@ namespace PortalsRT.Scene.Objects
         /// <returns></returns>
         public bool IsPointInBounds(Vector3 point)
         {
-            return point.X >= 0 && point.Z >= 0 && point.X <= transform.scale.X && point.Z <= transform.scale.Z && Math.Abs(point.Y) < 1e-2f;
+             return point.X >= 0 && point.Z >= 0 && point.X <= transform.scale.X && point.Z <= transform.scale.Z && Math.Abs(point.Y) < 1e-1;
         }
 
     }

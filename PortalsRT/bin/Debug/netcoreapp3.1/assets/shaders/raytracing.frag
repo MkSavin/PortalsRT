@@ -366,12 +366,12 @@ vec3 sky(Ray ray, vec3 sunDirection, bool fast)
     return clamp(color * 0.085, 0., 1.);
 }
 
-const int portalsNumber = 2;
+const int portalsNumber = 4;
 Portal portals[portalsNumber];
 
 Portal nullPortal = Portal(Plane(vec2(0.), vec3(0.), vec3(0.), nullMaterial));
 
-const int portalsConnectionsNumber = 1;
+const int portalsConnectionsNumber = 2;
 PortalConnection portalConnections[portalsConnectionsNumber];
 
 PortalConnection nullPortalConnection = PortalConnection(nullPortal, nullPortal);
@@ -401,17 +401,28 @@ Hit sceneIntersection(Ray ray, out Portal lastHittedPortal)
     // PLANE
     Material roomMaterial = Material(vec3(1.), 0., 5, 0.2, 0.);
 
-    const int planesNumber = 8;
+    const int planesNumber = 14;
     Plane planes[planesNumber];
 
-    planes[0] = Plane(vec2(2., 4.), vec3(0.), vec3(0.), roomMaterial);
-    planes[1] = Plane(vec2(2., 2.), vec3(0.), vec3(6., 0., -2.), roomMaterial);
-    planes[2] = Plane(vec2(1., 0.5), vec3(0., 0., PI / 2), vec3(2., 1., 3.5), roomMaterial);
-    planes[3] = Plane(vec2(1., 0.5), vec3(0., 0., PI / 2), vec3(2., 1., -3.5), roomMaterial);
-    planes[4] = Plane(vec2(1., 1.), vec3(0., 0., PI / 2), vec3(2., 1., 0), roomMaterial);
-    planes[5] = Plane(vec2(1., 4.), vec3(0., 0., -PI / 2), vec3(-2., 1., 0), roomMaterial);
-    planes[6] = Plane(vec2(1., 2.), vec3(0., PI / 2, PI / 2), vec3(0., 1., -4.), roomMaterial);
-    planes[7] = Plane(vec2(1., 2.), vec3(0., -PI / 2., -PI / 2), vec3(0., 1., 4.), roomMaterial);
+    float roomOffset = 0.;
+
+    planes[0] = Plane(vec2(2., 4.), vec3(0.), vec3(roomOffset + 0., 0., 0.), roomMaterial);
+    planes[1] = Plane(vec2(1., 0.5), vec3(0., 0., PI / 2), vec3(roomOffset + 2., 1., 3.5), roomMaterial);
+    planes[2] = Plane(vec2(1., 0.5), vec3(0., 0., PI / 2), vec3(roomOffset + 2., 1., -3.5), roomMaterial);
+    planes[3] = Plane(vec2(1., 1.), vec3(0., 0., PI / 2), vec3(roomOffset + 2., 1., 0), roomMaterial);
+    planes[4] = Plane(vec2(1., 4.), vec3(0., 0., -PI / 2), vec3(roomOffset + -2., 1., 0), roomMaterial);
+    planes[5] = Plane(vec2(1., 2.), vec3(0., PI / 2, PI / 2), vec3(roomOffset + 0., 1., -4.), roomMaterial);
+    planes[6] = Plane(vec2(1., 2.), vec3(0., -PI / 2., -PI / 2), vec3(roomOffset + 0., 1., 4.), roomMaterial);
+
+    roomOffset = 6;
+
+    planes[7] = Plane(vec2(2., 4.), vec3(0.), vec3(roomOffset + 0., 0., 0.), roomMaterial);
+    planes[8] = Plane(vec2(1., 0.5), vec3(0., 0., PI / 2), vec3(roomOffset - 2., 1., 3.5), roomMaterial);
+    planes[9] = Plane(vec2(1., 0.5), vec3(0., 0., PI / 2), vec3(roomOffset - 2., 1., -3.5), roomMaterial);
+    planes[10] = Plane(vec2(1., 1.), vec3(0., 0., PI / 2), vec3(roomOffset - 2., 1., 0), roomMaterial);
+    planes[11] = Plane(vec2(1., 4.), vec3(0., 0., -PI / 2), vec3(roomOffset + 2., 1., 0), roomMaterial);
+    planes[12] = Plane(vec2(1., 2.), vec3(0., PI / 2, PI / 2), vec3(roomOffset + 0., 1., -4.), roomMaterial);
+    planes[13] = Plane(vec2(1., 2.), vec3(0., -PI / 2., -PI / 2), vec3(roomOffset + 0., 1., 4.), roomMaterial);
 
     for (int i = 0; i < planesNumber; i++)
     {
@@ -451,14 +462,26 @@ Hit sceneIntersection(Ray ray, out Portal lastHittedPortal)
     }
 
     // PORTAL
+    roomOffset = 0.;
+
     portals[0] = Portal(
-                    Plane(vec2(1.), vec3(PI, 0., PI / 2), vec3(2., 1., 2.), nullMaterial)
+                    Plane(vec2(1.), vec3(0, 0., PI / 2), vec3(roomOffset + 2., 1., 2.), nullMaterial)
                 );
     portals[1] = Portal(
-                    Plane(vec2(1.), vec3(0., 0., PI / 2), vec3(2., 1., -2.), nullMaterial)
+                    Plane(vec2(1.), vec3(PI, 0., PI / 2), vec3(roomOffset + 2., 1., -2.), nullMaterial)
+                );
+
+    roomOffset = 6;
+
+    portals[2] = Portal(
+                    Plane(vec2(1.), vec3(0, 0., PI / 2), vec3(roomOffset - 2., 1., 2.), nullMaterial)
+                );
+    portals[3] = Portal(
+                    Plane(vec2(1.), vec3(PI, 0., PI / 2), vec3(roomOffset - 2., 1., -2.), nullMaterial)
                 );
 
     portalConnections[0] = PortalConnection(portals[0], portals[1]);
+    portalConnections[1] = PortalConnection(portals[2], portals[3]);
 
     for (int i = 0; i < portalsNumber; i++)
     {
@@ -577,19 +600,17 @@ Ray portalizeHittedRay(Ray ray, Hit hit, Portal basePortal, Portal targetPortal)
     relativeHitPosition /= vec3(basePortal.base.size, 1.);
 
     // Transform hit position and ray direction to absolute by using second (target) portal transform
-
     rotationComponents = rotationMatrix(targetPortal.base.rotation);
-    transformRotationMatrix = rotationComponents.x * rotationComponents.y * rotationComponents.z;
+    transformRotationMatrix = inverse(rotationComponents.x * rotationComponents.y * rotationComponents.z);
 
     vec3 relativeRayOrigin = relativeHitPosition * vec3(targetPortal.base.size, 1.);
-    relativeRayOrigin = (inverse(transformRotationMatrix) * vec4(relativeRayOrigin, 0.)).xyz;
+    relativeRayOrigin = (transformRotationMatrix * vec4(relativeRayOrigin, 0.)).xyz;
 
     vec3 absoluteRayOrigin = relativeRayOrigin + targetPortal.base.position;
 
-    newDirection = (inverse(transformRotationMatrix) * vec4(newDirection, 0.)).xyz;
+    newDirection = (transformRotationMatrix * vec4(newDirection, 0.)).xyz;
 
     // Return ray
-
     return Ray(absoluteRayOrigin + epsilon * newDirection, newDirection);
 }
 

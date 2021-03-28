@@ -54,18 +54,19 @@ namespace PortalsRT.Mathematics.Vector
                 switch (orderItem)
                 {
                     case "x":
-                        transformMatrix = Matrix3.CreateRotationX(rotation.X);
+                        transformMatrix *= Matrix3.CreateRotationX(rotation.X);
                         break;
                     case "y":
-                        transformMatrix = Matrix3.CreateRotationY(rotation.Y);
+                        transformMatrix *= Matrix3.CreateRotationY(rotation.Y);
                         break;
                     case "z":
-                        transformMatrix = Matrix3.CreateRotationZ(rotation.Z);
+                        transformMatrix *= Matrix3.CreateRotationZ(rotation.Z);
                         break;
                 }
             }
 
-            return transformMatrix;
+            return Matrix3.CreateRotationX(rotation.X) * Matrix3.CreateRotationY(rotation.Y) * Matrix3.CreateRotationZ(rotation.Z);
+            // return transformMatrix;
         }
 
         public Matrix4 TransformTranslateMatrix() => Matrix4.CreateTranslation(position);

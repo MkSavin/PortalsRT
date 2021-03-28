@@ -89,10 +89,10 @@ namespace PortalsRT.Scene
                 }
             }
 
-            Console.SetCursorPosition(0, 0);
-            Console.WriteLine("                                               ");
-            Console.WriteLine("                                               ");
-            Console.WriteLine("                                               ");
+            // Console.SetCursorPosition(0, 0);
+            // Console.WriteLine("                                               ");
+            // Console.WriteLine("                                               ");
+            // Console.WriteLine("                                               ");
 
             foreach (var portal in portals)
             {
@@ -111,10 +111,8 @@ namespace PortalsRT.Scene
                     Vector3 portalspaceVelocity = AbsoluteVelocity * portalspaceRotationTransform.Inverted();
 
                     // Vector3.UnitY is normal of portal in portalspace
-                    if (Vector3.Dot(portalspaceVelocity, Vector3.UnitY) < 0)
+                    if (Vector3.Dot(portalspaceVelocity, Vector3.UnitY) < 0 && Vector3.Dot(distanceVector, Vector3.UnitY) > 0 /*|| Vector3.Dot(portalspaceVelocity, Vector3.UnitY) > 0 && Vector3.Dot(distanceVector, Vector3.UnitY) < 0*/)
                     {
-                        // TODO: Check: Vector3.Dot(distanceVector, Vector3.UnitY) > 0
-
                         Vector3 positionRelativeToPortalSize = new Vector3(distanceVector.X / portalNormalizedSize.X, 0, distanceVector.Z / portalNormalizedSize.Z);
 
                         var invertDirection = Vector3.UnitX * portalspaceRotationTransform;
@@ -129,7 +127,6 @@ namespace PortalsRT.Scene
                         portalNormalizedSize = targetPortal.NormalizedSize();
 
                         positionRelativeToPortalSize *= portalNormalizedSize;
-                        positionRelativeToPortalSize.Y = 1e-2f;
 
                         distanceVector = positionRelativeToPortalSize - portalNormalizedSize / 2;
 
@@ -139,12 +136,10 @@ namespace PortalsRT.Scene
 
                         distanceVector *= portalspaceRotationTransform.Inverted();
 
-                        transform.position = targetPortal.transform.position - distanceVector;
+                        var epsilonOffset = portalspaceRotationTransform.Inverted() * Vector3.UnitY * 1e-3f;
+
+                        transform.position = targetPortal.transform.position - distanceVector + epsilonOffset;
                         transform.rotation = portalspaceCameraRotation * portalspaceRotationTransform.Inverted() + Vector3.UnitY * (float)Math.PI;
-
-                        Console.SetCursorPosition(0, 0);
-                        Console.WriteLine(invertDirection);
-
                     }
                 }
             }
