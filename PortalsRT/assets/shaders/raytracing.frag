@@ -5,7 +5,18 @@
 #define SAMPLES_PER_MSAA_LEVEL 1
 #define DENOISE .96
 
+// Sparks
+#define SPEED_FACTOR 1.5
+#define LENGTH_FACTOR 1.5
+#define GROUP_FACTOR 1.0
+#define SPREAD_FACTOR 0.1
+#define MIN_ANGLE 0.1
+#define RAND_FACTOR 0.0
+
 #define PI 3.14159265359
+
+#define MAX_SPARKS 12
+uniform vec3 sparksPositions[MAX_SPARKS];
 
 const float gammaCorrection = 2.2;
 const float epsilon = 4e-4;
@@ -52,6 +63,7 @@ struct Material
     float specularPower;
     float specularIntensity;
     float glowness;
+    bool fullBsdf;
 };
 
 //** Scene Objects **
@@ -78,6 +90,12 @@ struct SunLight
     float intensity;
     vec3 direction;
     vec3 color;
+};
+
+struct Spark
+{
+    vec3 color;
+    vec3 position;
 };
 
 struct Sphere
@@ -131,7 +149,7 @@ struct Hit
     bool portal;
 };
 
-Material nullMaterial = Material(vec3(0.), 0., 0., 0., 0.);
+Material nullMaterial = Material(vec3(0.), 0., 0., 0., 0., false);
 Hit nullHit = Hit(nullMaterial, 10000, vec3(0.), vec3(0.), false, false);
 
 //** MATH **
@@ -272,6 +290,16 @@ Hit planeIntersection(Ray ray, Plane plane)
     return Hit(plane.material, distanceTo, hitPosition, planeDirection, true, false);
 }
 
+Hit sparkIntersection(Ray ray, Spark spark)
+{
+    if (dot((spark.position - ray.origin), ray.direction) / (length(ray.origin - spark.position) * length(ray.direction)) < 1 - 1e-5)
+    {
+        return nullHit;
+    }
+
+    return Hit(Material(vec3(1.), 0., 0., 0., 1., false), length(spark.position - ray.origin), spark.position, normalize(spark.position - ray.origin), true, false);
+}
+
 Hit sphereIntersection(Ray ray, Sphere sphere)
 {
     vec3 distanceVector = ray.origin - sphere.position;
@@ -355,8 +383,8 @@ Hit sceneIntersection(Ray ray, out Portal lastHittedPortal)
     // SPHERE
     const int spheresNumber = 2;
     Sphere spheres[spheresNumber];
-    spheres[0] = Sphere(0.25, vec3(0., 1., -1.), Material(vec3(1.), 1., 5, 0.2, 0.));
-    spheres[1] = Sphere(0.1, vec3(-1., 1., -0.5), Material(vec3(1., 0., 0.), 1., 3, 0.01, 0.));
+    spheres[0] = Sphere(0.25, vec3(0., 1., -1.), Material(vec3(1.), 1., 5, 0.2, 0., true));
+    spheres[1] = Sphere(0.1, vec3(-1., 1., -0.5), Material(vec3(1., 0., 0.), 1., 3, 0.01, 0., true));
 
     for (int i = 0; i < spheresNumber; i++)
     {
@@ -369,7 +397,7 @@ Hit sceneIntersection(Ray ray, out Portal lastHittedPortal)
     }
 
     // PLANE
-    Material roomMaterial = Material(vec3(1.), 0., 5, 0.2, 0.);
+    Material roomMaterial = Material(vec3(1.), 0., 5, 0.2, 0., true);
 
     const int planesNumber = 14;
     Plane planes[planesNumber];
@@ -404,6 +432,24 @@ Hit sceneIntersection(Ray ray, out Portal lastHittedPortal)
         }
     }
 
+    // Sparks
+    Spark sparks[MAX_SPARKS];
+
+    for (int i = 0; i < MAX_SPARKS; i++)
+    {
+        sparks[i] = Spark(vec3(1.), sparksPositions[i - planesNumber]);
+    }
+
+    for (int i = 0; i < MAX_SPARKS; i++)
+    {
+        tempHit = sparkIntersection(ray, sparks[i]);
+
+        if (tempHit.hitObject && (!hit.hitObject || tempHit.distanceTo < hit.distanceTo))
+        {
+            hit = tempHit;
+        }
+    }
+
     // BOX
     const int boxesNumber = 2;
     Box boxes[boxesNumber];
@@ -418,8 +464,8 @@ Hit sceneIntersection(Ray ray, out Portal lastHittedPortal)
     vec2 uvPosition;
     int faceNumber;
 
-    boxes[0] = Box(vec3(1.), vec3(0., 0., 0.), vec3(0.4, 0.5, 0.), Material(vec3(1., 1., 0.), 1., 5, 0.04, 0.));
-    boxes[1] = Box(vec3(1.), vec3(0., 0., 0.), vec3(0.2, 0.5, 1.2), Material(vec3(1., 0., 1.), 1., 5, 0.04, 0.));
+    boxes[0] = Box(vec3(1.), vec3(0., 0., 0.), vec3(0.4, 0.5, 0.), Material(vec3(1., 1., 0.), 1., 5, 0.04, 0., true));
+    boxes[1] = Box(vec3(1.), vec3(0., 0., 0.), vec3(0.2, 0.5, 1.2), Material(vec3(1., 0., 1.), 1., 5, 0.04, 0., true));
 
     for (int i = 0; i < boxesNumber; i++)
     {
@@ -623,19 +669,23 @@ vec3 radiance(Ray ray, SunLight sunLight)
 
                 tempColor = vec3(1. - currentFresnel) * brdf * backBrdf * attenuation * lightCast(hit.position, hit.normal, sunLight);
                 
+                tempColor = mix(tempColor, brdf, hit.material.glowness);
+
                 attenuation *= currentFresnel;
 
-                vec3 bsdfDirection = reflect(ray.direction, hit.normal);
-                ray = Ray(hit.position + epsilon * bsdfDirection, bsdfDirection);
+                if (hit.material.fullBsdf)
+                {
+                    vec3 bsdfDirection = reflect(ray.direction, hit.normal);
+                    ray = Ray(hit.position + epsilon * bsdfDirection, bsdfDirection);
 
-                mat3 currentOnb = onb(hit.normal);
-                bsdfDirection = mix(normalize(currentOnb * cosHemisphere(hash2())), bsdfDirection, hit.material.reflectionIntensity);
+                    mat3 currentOnb = onb(hit.normal);
+                    bsdfDirection = mix(normalize(currentOnb * cosHemisphere(hash2())), bsdfDirection, hit.material.reflectionIntensity);
 
-                Ray nextRay = Ray(hit.position + epsilon * bsdfDirection, bsdfDirection);
+                    Ray nextRay = Ray(hit.position + epsilon * bsdfDirection, bsdfDirection);
 
-                backBrdf *= brdf;
-
-                ray = nextRay;
+                    backBrdf *= brdf;
+                    ray = nextRay;
+                }
 
                 color += tempColor;
             }
@@ -711,10 +761,12 @@ void main()
 
     vec3 accumColor = texture(accumTexture, gl_FragCoord.xy / screenSize.xy).xyz;
 
+    #ifdef DENOISE
     if (frameNumber > 0 && !camera_moved)
     {
         color = color * (1. - DENOISE) + accumColor * DENOISE;
     }
+    #endif
 
     // vec2 vignetteUv = gl_FragCoord.xy / screenSize.xy;
     // color *= 0.9 + 0.1 * pow(16.0 * vignetteUv.x * vignetteUv.y * (1.0 - vignetteUv.x) * (1.0 - vignetteUv.y), 0.1);  

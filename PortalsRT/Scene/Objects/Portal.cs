@@ -10,6 +10,14 @@ namespace PortalsRT.Scene.Objects
     {
         public Portal targetPortal;
 
+        public Portal ConnectToPortal(Portal target)
+        {
+            targetPortal = target;
+            target.targetPortal = this;
+
+            return this;
+        }
+
         public Vector3 NormalizedSize()
         {
             return new Vector3(transform.scale.X, 0, transform.scale.Y);

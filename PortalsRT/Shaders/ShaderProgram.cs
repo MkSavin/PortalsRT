@@ -1,7 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Text;
-
+using System.Text.RegularExpressions;
 using OpenTK.Graphics.OpenGL;
 using OpenTK.Mathematics;
 using PortalsRT.PropertyObjects;
@@ -331,6 +331,8 @@ namespace PortalsRT.Shaders
         /// <param name="data">The data to set</param>
         public ShaderProgram SetVector3(string name, Vector3 data)
         {
+            name = Regex.Replace(name, "\\[\\d+\\]", "[0]");
+
             PrepareProgramForUniform(name);
             GL.Uniform3(uniforms[name], data);
 
