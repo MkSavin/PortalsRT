@@ -36,39 +36,39 @@ namespace PortalsRT
             {
                 // window.VSync = VSyncMode.Off;
 
+                //Portal a = (Portal)new Portal().SetTransform(new Transform(new Vector3(2f, 1f, 2f), new Vector3(0, 0, (float)Math.PI / 2), new Vector3(2f)));
+                //Portal b = (Portal)new Portal().SetTransform(new Transform(new Vector3(2f, 1f, -2f), new Vector3(0, 0, (float)Math.PI / 2), new Vector3(2f)));
+
+                //Portal c = (Portal)new Portal().SetTransform(new Transform(new Vector3(6 - 2f, 1f, 2f), new Vector3((float)Math.PI, 0, (float)Math.PI / 2), new Vector3(2f)));
+                //Portal d = (Portal)new Portal().SetTransform(new Transform(new Vector3(6 - 2f, 1f, -2f), new Vector3((float)Math.PI, 0, (float)Math.PI / 2), new Vector3(2f)));
+
+                //a.targetPortal = b;
+                //b.targetPortal = a;
+
+                //c.targetPortal = d;
+                //d.targetPortal = c;
+
+                //portals.Add(a);
+                //portals.Add(b);
+                //portals.Add(c);
+                //portals.Add(d);
+
                 Portal a = (Portal)new Portal().SetTransform(new Transform(new Vector3(2f, 1f, 2f), new Vector3(0, 0, (float)Math.PI / 2), new Vector3(2f)));
                 Portal b = (Portal)new Portal().SetTransform(new Transform(new Vector3(2f, 1f, -2f), new Vector3(0, 0, (float)Math.PI / 2), new Vector3(2f)));
 
                 Portal c = (Portal)new Portal().SetTransform(new Transform(new Vector3(6 - 2f, 1f, 2f), new Vector3((float)Math.PI, 0, (float)Math.PI / 2), new Vector3(2f)));
                 Portal d = (Portal)new Portal().SetTransform(new Transform(new Vector3(6 - 2f, 1f, -2f), new Vector3((float)Math.PI, 0, (float)Math.PI / 2), new Vector3(2f)));
 
-                a.targetPortal = b;
-                b.targetPortal = a;
+                a.targetPortal = c;
+                b.targetPortal = d;
 
-                c.targetPortal = d;
-                d.targetPortal = c;
+                c.targetPortal = a;
+                d.targetPortal = b;
 
                 portals.Add(a);
                 portals.Add(b);
                 portals.Add(c);
                 portals.Add(d);
-
-                //Portal a = (Portal)new Portal().SetTransform(new Transform(new Vector3(2f, 1f, 2f), new Vector3(0, 0, (float)Math.PI / 2), new Vector3(2f)));
-                //Portal b = (Portal)new Portal().SetTransform(new Transform(new Vector3(2f, 1f, -2f), new Vector3((float)Math.PI, 0, (float)Math.PI / 2), new Vector3(2f)));
-
-                //Portal c = (Portal)new Portal().SetTransform(new Transform(new Vector3(6 - 2f, 1f, 2f), new Vector3(0, 0, (float)Math.PI / 2), new Vector3(2f)));
-                //Portal d = (Portal)new Portal().SetTransform(new Transform(new Vector3(6 - 2f, 1f, -2f), new Vector3((float)Math.PI, 0, (float)Math.PI / 2), new Vector3(2f)));
-
-                //a.targetPortal = c;
-                //b.targetPortal = d;
-
-                //c.targetPortal = a;
-                //d.targetPortal = b;
-
-                //portals.Add(a);
-                //portals.Add(b);
-                //portals.Add(c);
-                //portals.Add(d);
 
                 window.Render((deltaTick, shader) => {
 

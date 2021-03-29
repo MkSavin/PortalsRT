@@ -65,8 +65,8 @@ namespace PortalsRT.Mathematics.Vector
                 }
             }
 
-            return Matrix3.CreateRotationX(rotation.X) * Matrix3.CreateRotationY(rotation.Y) * Matrix3.CreateRotationZ(rotation.Z);
-            // return transformMatrix;
+            // return Matrix3.CreateRotationX(rotation.X) * Matrix3.CreateRotationY(rotation.Y) * Matrix3.CreateRotationZ(rotation.Z);
+            return transformMatrix;
         }
 
         public Matrix4 TransformTranslateMatrix() => Matrix4.CreateTranslation(position);

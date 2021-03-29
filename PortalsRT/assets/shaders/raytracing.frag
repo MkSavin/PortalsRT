@@ -1,6 +1,6 @@
 #version 420
 
-#define RAY_ITERATIONS 5
+#define RAY_ITERATIONS 4
 #define MSAA 1
 #define SAMPLES_PER_MSAA_LEVEL 1
 #define DENOISE .96
@@ -40,36 +40,6 @@ lowp vec2 hash2() {
 lowp vec3 hash3() {
     return fract(sin(vec3(seed += 0.1, seed += 0.1, seed += 0.1)) * vec3(43758.5453123, 22578.1459123, 19642.3490423));
 }
-
-/*
-int flatIdx = 0;
-
-void teaEncryption(inout uvec2 arg)
-{
-	uvec4 key = uvec4(0xa341316c, 0xc8013ea4, 0xad90777d, 0x7e95761e);
-	uint v0 = arg[0], v1 = arg[1];
-	uint sum = 0u;
-	uint delta = 0x9e3779b9u;
-
-	for(int i = 0; i < 32; i++) {
-		sum += delta;
-		v0 += ((v1 << 4) + key[0]) ^ (v1 + sum) ^ ((v1 >> 5) + key[1]);
-		v1 += ((v0 << 4) + key[2]) ^ (v0 + sum) ^ ((v0 >> 5) + key[3]);
-	}
-
-	arg[0] = v0;
-	arg[1] = v1;
-}
-
-vec2 random()
-{
-    uvec2 arg = uvec2(flatIdx, seed++);
-
-    teaEncryption(arg);
-
-    return fract(vec2(arg) / vec2(0xffffffffu));
-}
-*/
 
 //** Scene **
 
@@ -231,7 +201,7 @@ Hit boxIntersection(Ray ray, Box box, out vec2 uvPosition, out int faceNumber)
     float distanceToNear = max(max(point1.x, point1.y), point1.z);
     float distanceToFar = min(min(point2.x, point2.y), point2.z);
 	
-    if(distanceToNear > distanceToFar || distanceToFar < 0.0)
+    if (distanceToNear > distanceToFar || distanceToFar < 0.0)
     {
         return nullHit;
     }
@@ -241,13 +211,13 @@ Hit boxIntersection(Ray ray, Box box, out vec2 uvPosition, out int faceNumber)
     mat4 transformBoxToWorld = inverse(transformWorldToBox);
 
     // Compute normal (in world space), UV position and face number
-    if(point1.x > point1.y && point1.x > point1.z)
+    if (point1.x > point1.y && point1.x > point1.z)
     { 
         normal = transformBoxToWorld[0].xyz * side.x; 
         uvPosition = rayOrigin.yz + rayDirection.yz * point1.x; 
         faceNumber = (1 + int(side.x)) / 2;
     }
-    else if(point1.y > point1.z)
+    else if (point1.y > point1.z)
     { 
         normal = transformBoxToWorld[1].xyz * side.y; 
         uvPosition = rayOrigin.zx + rayDirection.zx * point1.y; 
@@ -465,7 +435,7 @@ Hit sceneIntersection(Ray ray, out Portal lastHittedPortal)
     roomOffset = 0.;
 
     portals[0] = Portal(
-                    Plane(vec2(1.), vec3(0, 0., PI / 2), vec3(roomOffset + 2., 1., 2.), nullMaterial)
+                    Plane(vec2(1.), vec3(0., 0., PI / 2), vec3(roomOffset + 2., 1., 2.), nullMaterial)
                 );
     portals[1] = Portal(
                     Plane(vec2(1.), vec3(PI, 0., PI / 2), vec3(roomOffset + 2., 1., -2.), nullMaterial)
@@ -474,14 +444,14 @@ Hit sceneIntersection(Ray ray, out Portal lastHittedPortal)
     roomOffset = 6;
 
     portals[2] = Portal(
-                    Plane(vec2(1.), vec3(0, 0., PI / 2), vec3(roomOffset - 2., 1., 2.), nullMaterial)
+                    Plane(vec2(1.), vec3(0., 0., PI / 2), vec3(roomOffset - 2., 1., 2.), nullMaterial)
                 );
     portals[3] = Portal(
                     Plane(vec2(1.), vec3(PI, 0., PI / 2), vec3(roomOffset - 2., 1., -2.), nullMaterial)
                 );
 
-    portalConnections[0] = PortalConnection(portals[0], portals[1]);
-    portalConnections[1] = PortalConnection(portals[2], portals[3]);
+    portalConnections[0] = PortalConnection(portals[0], portals[2]);
+    portalConnections[1] = PortalConnection(portals[1], portals[3]);
 
     for (int i = 0; i < portalsNumber; i++)
     {
@@ -629,10 +599,10 @@ vec3 radiance(Ray ray, SunLight sunLight)
 
     for (int i = 0; i <= RAY_ITERATIONS; i++)
     {
-        // if (attenuation < 1e-3)
-        // {
-        //     continue;
-        // }
+        if (attenuation < 1e-2)
+        {
+            continue;
+        }
 
         if (stopIterations)
         {
@@ -649,7 +619,7 @@ vec3 radiance(Ray ray, SunLight sunLight)
 
                 float currentFresnel = fresnel(hit.normal, -ray.direction, hit.material);
 
-                vec3 brdf = tempColor;// / PI;
+                vec3 brdf = tempColor;
 
                 tempColor = vec3(1. - currentFresnel) * brdf * backBrdf * attenuation * lightCast(hit.position, hit.normal, sunLight);
                 
@@ -658,28 +628,14 @@ vec3 radiance(Ray ray, SunLight sunLight)
                 vec3 bsdfDirection = reflect(ray.direction, hit.normal);
                 ray = Ray(hit.position + epsilon * bsdfDirection, bsdfDirection);
 
-                {  //brdf 
-                    mat3 currentOnb = onb(hit.normal);
-                    bsdfDirection = mix(normalize(currentOnb * cosHemisphere(hash2())), bsdfDirection, hit.material.reflectionIntensity);
-                    // bsdfDirection = normalize(currentOnb * cosHemisphere(random()));
+                mat3 currentOnb = onb(hit.normal);
+                bsdfDirection = mix(normalize(currentOnb * cosHemisphere(hash2())), bsdfDirection, hit.material.reflectionIntensity);
 
-                    Ray nextRay = Ray(hit.position + epsilon * bsdfDirection, bsdfDirection);
+                Ray nextRay = Ray(hit.position + epsilon * bsdfDirection, bsdfDirection);
 
-                    // hit = sceneIntersection(nextRay);
+                backBrdf *= brdf;
 
-                    // if (!hit.hitObject)
-                    // {
-                    //     break;
-                    // }
-                    
-                    // currentFresnel = fresnel(hit.normal, -ray.direction, hit.material);
-                    backBrdf *= brdf;
-
-                    // attenuation *= currentFresnel;
-
-                    ray = nextRay;
-                    //color += attenuation * hit.material.color;
-                }
+                ray = nextRay;
 
                 color += tempColor;
             }
@@ -760,7 +716,8 @@ void main()
         color = color * (1. - DENOISE) + accumColor * DENOISE;
     }
 
-    // color *= 0.5 + 0.5 * pow(16.0 * uv.x * uv.y * (1.0 - uv.x) * (1.0 - uv.y), 0.1);  
+    // vec2 vignetteUv = gl_FragCoord.xy / screenSize.xy;
+    // color *= 0.9 + 0.1 * pow(16.0 * vignetteUv.x * vignetteUv.y * (1.0 - vignetteUv.x) * (1.0 - vignetteUv.y), 0.1);  
 
     outputColor = vec4(color, 1.0);
 }

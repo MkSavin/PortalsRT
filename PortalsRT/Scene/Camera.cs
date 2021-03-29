@@ -102,7 +102,7 @@ namespace PortalsRT.Scene
                 Vector3 distanceVector = portal.transform.position - transform.position;
                 Vector3 portalNormalizedSize = portal.NormalizedSize();
 
-                distanceVector *= portalspaceRotationTransform;
+                distanceVector *= portalspaceRotationTransform.Inverted();
 
                 distanceVector += portalNormalizedSize / 2;
 
@@ -130,16 +130,16 @@ namespace PortalsRT.Scene
 
                         distanceVector = positionRelativeToPortalSize - portalNormalizedSize / 2;
 
-                        Vector3 portalspaceCameraRotation = transform.rotation * portalspaceRotationTransform;
+                        Vector3 portalspaceCameraRotation = portalspaceRotationTransform.Inverted() * transform.rotation;
 
                         portalspaceRotationTransform = targetPortal.transform.TransformRotationMatrix();
 
-                        distanceVector *= portalspaceRotationTransform.Inverted();
+                        distanceVector *= portalspaceRotationTransform;
 
-                        var epsilonOffset = portalspaceRotationTransform.Inverted() * Vector3.UnitY * 1e-3f;
+                        var epsilonOffset = portalspaceRotationTransform.Inverted() * Vector3.UnitY * 1e-4f;
 
                         transform.position = targetPortal.transform.position - distanceVector + epsilonOffset;
-                        transform.rotation = portalspaceCameraRotation * portalspaceRotationTransform.Inverted() + Vector3.UnitY * (float)Math.PI;
+                        transform.rotation += (targetPortal.transform.rotation - portal.transform.rotation) * Matrix3.CreateRotationZ((float)Math.PI / 2) + Vector3.UnitY * (float)Math.PI;
                     }
                 }
             }
