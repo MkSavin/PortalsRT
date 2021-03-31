@@ -19,7 +19,7 @@ namespace PortalsRT
     public class Window : GameWindow
     {
         Stopwatch watch;
-        public int Frame { get; private set; } = 0;
+        public int FrameNumber { get; private set; } = 0;
 
         private int framebufferTexture = 0;
 
@@ -37,6 +37,7 @@ namespace PortalsRT
         private int vertexArrayObject;
 
         private ShaderProgram shader;
+        private ShaderProgram uiPlaneShader;
 
         private Texture noise;
 
@@ -53,7 +54,6 @@ namespace PortalsRT
 
             vertexBufferObject = GL.GenBuffer();
             GL.BindBuffer(BufferTarget.ArrayBuffer, vertexBufferObject);
-
             GL.BufferData(BufferTarget.ArrayBuffer, vertices.Length * sizeof(float), vertices, BufferUsageHint.StaticDraw);
 
             vertexArrayObject = GL.GenVertexArray();
@@ -62,6 +62,15 @@ namespace PortalsRT
             var layoutLocation = 0;
             GL.VertexAttribPointer(layoutLocation, 3, VertexAttribPointerType.Float, false, 3 * sizeof(float), 0);
             GL.EnableVertexAttribArray(layoutLocation);
+
+            uiPlaneShader = new ShaderProgram()
+              .AddShader(new Shader(ShaderType.VertexShader, new Asset("shaders/plaincolor.vert")))
+              .AddShader(new Shader(ShaderType.FragmentShader, new Asset("shaders/plaincolor.frag")))
+              .FullLink();
+
+            uiPlaneShader.Use();
+
+            uiPlaneShader.SetVector3("color", new Vector3(1, 1, 1));
 
             shader = new ShaderProgram()
               .AddShader(new Shader(ShaderType.VertexShader, new Asset("shaders/raytracing.vert")))
@@ -91,30 +100,44 @@ namespace PortalsRT
             base.OnLoad();
         }
 
-        public void Render(Action<double, ShaderProgram> callback)
+        public void Render(Action<double, ShaderProgram> renderCallback, Action<double> updateCallback, Action<double, ShaderProgram> uiCallback)
         {
+            Global.currentWindow = this;
+
+            float frameRate = 0;
+            UpdateFrame += (e) =>
+            {
+                watch.Stop();
+                Game.DeltaTime = watch.ElapsedMilliseconds / 1000F;
+                frameRate = 1F / (float)Game.DeltaTime;
+                Title = $"Portals RT";
+                watch.Restart();
+
+                updateCallback.Invoke(Game.DeltaTime);
+            };
+
             RenderFrame += (e) =>
             {
                 GL.Clear(ClearBufferMask.ColorBufferBit);
 
-                watch.Stop();
-                Game.DeltaTime = watch.ElapsedMilliseconds / 1000F;
-                Title = $"Portals RT. FPS: {1 / Game.DeltaTime}";
-                watch.Restart();
-
-                Frame++;
-                shader.SetInt("frameNumber", Frame);
+                FrameNumber++;
+                shader.SetInt("frameNumber", FrameNumber);
+                //shader.SetFloat("frameRate", frameRate);
                 shader.SetTexture("accumTexture", framebufferTexture, TextureUnit.Texture0, 0);
 
                 GL.ActiveTexture(TextureUnit.Texture0);
                 GL.BindTexture(TextureTarget.Texture2D, framebufferTexture);
 
-                callback.Invoke(Game.DeltaTime, shader);
+                renderCallback.Invoke(Game.DeltaTime, shader);
 
                 GL.BindVertexArray(vertexArrayObject);
                 GL.DrawArrays(PrimitiveType.TriangleStrip, 0, 5);
 
                 GL.CopyTexImage2D(TextureTarget.Texture2D, 0, InternalFormat.Rgb, 0, 0, Size.X, Size.Y, 0);
+
+                uiPlaneShader.Use();
+
+                uiCallback.Invoke(Game.DeltaTime, uiPlaneShader);
 
                 SwapBuffers();
             };
@@ -136,14 +159,20 @@ namespace PortalsRT
 
         protected override void OnResize(ResizeEventArgs e)
         {
-            base.OnResize(e);
-
             if (shader != null)
             {
                 shader.SetVector3("screenSize", new Vector3(Size.X, Size.Y, 0));
             }
 
             GL.Viewport(0, 0, Size.X, Size.Y);
+
+            GL.MatrixMode(MatrixMode.Projection);
+            GL.LoadIdentity();
+            Matrix4 p = Matrix4.CreateOrthographic(Size.X, Size.Y, 1.0f, 1000.0f);
+            GL.LoadMatrix(ref p);
+            GL.MatrixMode(MatrixMode.Modelview);
+            
+            base.OnResize(e);
         }
 
         protected override void OnUnload()

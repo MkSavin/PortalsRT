@@ -16,6 +16,8 @@ using PortalsRT.Mathematics.Vector;
 using PortalsRT.Input;
 using PortalsRT.Output;
 using PortalsRT.Particles;
+using PortalsRT.UI;
+using PortalsRT.UI.Elements;
 
 namespace PortalsRT
 {
@@ -92,29 +94,65 @@ namespace PortalsRT
             LoadParticles();
         }
 
-
         private static void Main()
         {
             var nativeWindowSettings = new NativeWindowSettings()
             {
                 Size = new Vector2i(1600, 1200),
                 Title = "Portals RT v" + Version,
+                Profile = ContextProfile.Compatability,
+                APIVersion = new Version(3, 2),
             };
 
             using (var window = new Window(GameWindowSettings.Default, nativeWindowSettings))
             {
                 LoadAndProcessObjects();
 
-                window.Render((deltaTick, shader) => {
+                List<UiElement> uiElements = new List<UiElement>();
 
-                    // StatBar.Write();
-                    PassParticles((float)deltaTick, shader);
+                uiElements.Add(
+                    new FramerateCounter()
+                        .SetScreenPivot(new Vector2(0, 1))
+                        .SetPivot(new Vector2(0, 1))
+                        .SetPosition(new Vector2(80, 80))
+                    );
+                uiElements.Add(
+                    new PositionView()
+                        .SetScreenPivot(new Vector2(0, 1))
+                        .SetPivot(new Vector2(0, 1))
+                        .SetPosition(new Vector2(80, 220))
+                    );
+                //uiElements.Add(
+                //    new ControlsTip()
+                //        .SetScreenPivot(new Vector2(1, 0))
+                //        .SetPivot(new Vector2(1, 0))
+                //        .SetPosition(new Vector2(80, 80))
+                //    );
 
-                    Camera.Instance.ProcessInput(window.KeyboardState, window.MouseState.Delta);
-                    Camera.Instance.ProcessPhysics(portals);
-                    Camera.Instance.UploadTransformToShader(shader);
+                Vector2i halfWindowSize = window.Size / 2;
 
-                });
+                window.Render(
+                    renderCallback: (deltaTick, shader) => {
+
+                        // StatBar.Write();
+                        PassParticles((float)deltaTick, shader);
+                        Camera.Instance.UploadTransformToShader(shader);
+
+                    },
+                    updateCallback: (deltaTick) => {
+
+                        Camera.Instance.ProcessInput(window.KeyboardState, window.MouseState.Delta);
+                        Camera.Instance.ProcessPhysics(portals);
+
+                    },
+                    uiCallback: (deltaTick, shader) => {
+
+                        foreach (var element in uiElements)
+                        {
+                            element.Render(shader);
+                        }
+
+                    });
             }
         }
 

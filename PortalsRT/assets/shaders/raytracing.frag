@@ -1,9 +1,16 @@
 #version 420
 
+// Rendering
 #define RAY_ITERATIONS 4
 #define MSAA 1
 #define SAMPLES_PER_MSAA_LEVEL 1
-#define DENOISE .96
+#define DENOISE .9//.75//.96
+
+// Ray Marching
+#define RAY_MARCHING_STEPS 128
+
+// Math
+#define PI 3.14159265359
 
 // Sparks
 #define SPEED_FACTOR 1.5
@@ -13,15 +20,18 @@
 #define MIN_ANGLE 0.1
 #define RAND_FACTOR 0.0
 
-#define PI 3.14159265359
-
 #define MAX_SPARKS 12
+
+// Julia
+#define JULIA_ITERATIONS 8//10
+
 uniform vec3 sparksPositions[MAX_SPARKS];
 
 const float gammaCorrection = 2.2;
 const float epsilon = 4e-4;
 
 uniform int frameNumber;
+uniform float frameRate;
 uniform vec3 screenSize;
 uniform bool camera_moved;
 uniform vec3 camera_rotation;
@@ -132,6 +142,12 @@ struct Box
     Material material;
 };
 
+struct Julia
+{
+    Box bounds;
+    vec4 constants;
+};
+
 //** Global **
 struct Ray
 {
@@ -147,10 +163,11 @@ struct Hit
     vec3 normal;
     bool hitObject;
     bool portal;
+    bool raymarching;
 };
 
 Material nullMaterial = Material(vec3(0.), 0., 0., 0., 0., false);
-Hit nullHit = Hit(nullMaterial, 10000, vec3(0.), vec3(0.), false, false);
+Hit nullHit = Hit(nullMaterial, 10000, vec3(0.), vec3(0.), false, false, false);
 
 //** MATH **
 struct RotationMatrixComponents
@@ -248,7 +265,7 @@ Hit boxIntersection(Ray ray, Box box, out vec2 uvPosition, out int faceNumber)
         faceNumber = (9 + int(side.z)) / 2;
     }
 
-    return Hit(box.material, distanceToNear, ray.origin + ray.direction * distanceToNear, normal, true, false);
+    return Hit(box.material, distanceToNear, ray.origin + ray.direction * distanceToNear, normal, true, false, false);
 }
 
 Hit planeIntersection(Ray ray, Plane plane)
@@ -287,7 +304,7 @@ Hit planeIntersection(Ray ray, Plane plane)
         return nullHit;
     }
 
-    return Hit(plane.material, distanceTo, hitPosition, planeDirection, true, false);
+    return Hit(plane.material, distanceTo, hitPosition, planeDirection, true, false, false);
 }
 
 Hit sparkIntersection(Ray ray, Spark spark)
@@ -297,7 +314,7 @@ Hit sparkIntersection(Ray ray, Spark spark)
         return nullHit;
     }
 
-    return Hit(Material(vec3(1.), 0., 0., 0., 1., false), length(spark.position - ray.origin), spark.position, normalize(spark.position - ray.origin), true, false);
+    return Hit(Material(vec3(1.), 0., 0., 0., 1., false), length(spark.position - ray.origin), spark.position, normalize(spark.position - ray.origin), true, false, false);
 }
 
 Hit sphereIntersection(Ray ray, Sphere sphere)
@@ -334,7 +351,7 @@ Hit sphereIntersection(Ray ray, Sphere sphere)
 
     vec3 hitPosition = ray.origin + distanceTo * ray.direction;
 
-    return Hit(sphere.material, distanceTo, hitPosition, (hitPosition - sphere.position) / sphere.radius, true, false);
+    return Hit(sphere.material, distanceTo, hitPosition, (hitPosition - sphere.position) / sphere.radius, true, false, false);
 }
 
 //** RAYTRACING **
@@ -374,7 +391,9 @@ PortalConnection portalConnections[portalsConnectionsNumber];
 
 PortalConnection nullPortalConnection = PortalConnection(nullPortal, nullPortal);
 
-Hit sceneIntersection(Ray ray, out Portal lastHittedPortal)
+Julia julia = Julia(Box(vec3(32.), vec3(0., 0., 0.), vec3(6.2, 0.5, 0), Material(vec3(1.), 0., 5, 0.2, 0., true)), vec4(-0.137, -0.630, -0.475, -0.046));
+
+Hit sceneIntersection(Ray ray, out Portal lastHittedPortal, out Hit withoutRayMarching)
 {
     lastHittedPortal = nullPortal;
     Hit hit = nullHit;
@@ -511,8 +530,92 @@ Hit sceneIntersection(Ray ray, out Portal lastHittedPortal)
         }
     }
 
+    withoutRayMarching = hit;
+
+    // JULIA
+    tempHit = boxIntersection(ray, julia.bounds, uvPosition, faceNumber);
+
+    if (tempHit.hitObject && (!hit.hitObject || tempHit.distanceTo < hit.distanceTo))
+    {
+        hit = tempHit;
+        hit.raymarching = true;
+    }
+
     return hit;
 }
+
+// Raymarching
+
+vec4 qSquare(vec4 a)
+{
+    return vec4(a.x * a.x - dot(a.yzw, a.yzw), 2. * a.x * a.yzw);
+}
+
+float juliaDistance(Julia julia, vec3 p) {
+    vec4 f = vec4(p * (1. / julia.bounds.size + 1.) - julia.bounds.position, 0.0);
+    
+    float fp2 = 1.0;
+
+    for (int i = 0; i < JULIA_ITERATIONS; i++)
+    {
+        fp2 *= 4.0 * dot(f,f);
+		f = qSquare(f) + julia.constants; // Julia formula constants
+        
+        if (dot(f,f) > 4.0)
+        {
+            break;
+        }
+    }
+    
+    float r = length(f);
+    
+    return 0.5 * log(r) * (r / sqrt(fp2)) / length(1. / julia.bounds.size + 1.);
+}
+
+// Method 1
+vec3 juliaNormal(vec3 position, float distanceToObject)
+{
+    vec3 normal;
+
+    normal.x = juliaDistance(julia, vec3(position.x + epsilon, position.y, position.z));
+    normal.y = juliaDistance(julia, vec3(position.x, position.y + epsilon, position.z));
+    normal.z = juliaDistance(julia, vec3(position.x, position.y, position.z + epsilon));
+
+    return normalize(normal - distanceToObject);
+}
+
+Hit sceneIntersectionRayMarching(Ray ray)
+{
+    vec3 e = vec3(0.0005, 0., 0.);
+
+    vec3 position;
+    float distanceToRayOrigin = 0.;
+    float distanceToObject;
+    vec3 normal;
+
+    for (int i = 0; i < RAY_MARCHING_STEPS; i++)
+    {
+        position = ray.origin + ray.direction * distanceToRayOrigin;
+        
+        distanceToObject = juliaDistance(julia, position);
+        
+        if (distanceToRayOrigin > 15.)
+        {
+            break;
+        }
+
+        if (distanceToObject <= 0.)
+        {
+            return Hit(julia.bounds.material, distanceToRayOrigin, position, juliaNormal(position, distanceToObject), true, false, true);
+        }
+
+        distanceToRayOrigin += max(distanceToObject, epsilon);
+    }
+
+    return nullHit;
+}
+
+// Colors computation
 
 // "Edges shadow"
 // Schlick's approximation
@@ -526,9 +629,20 @@ vec3 lightCast(vec3 hitPosition, vec3 normal, SunLight light)
 {
     Ray ray = Ray(hitPosition + epsilon * -light.direction, -light.direction);
     Portal portal;
-    Hit shadowHit = sceneIntersection(ray, portal);
+    Hit nonRaymarched;
+    Hit hit = sceneIntersection(ray, portal, nonRaymarched);
 
-    if (!shadowHit.hitObject)
+    if (hit.hitObject && hit.raymarching)
+    {
+        hit = sceneIntersectionRayMarching(ray);
+    }
+
+    if (hit == nullHit)
+    {
+        hit = nonRaymarched;
+    }
+
+    if (!hit.hitObject)
     {
         return clamp(dot(normal, -light.direction), 0., 1.) * light.color;
     }
@@ -643,6 +757,11 @@ vec3 radiance(Ray ray, SunLight sunLight)
     Portal targetPortal;
     PortalConnection lastPortalConnection = nullPortalConnection;
 
+    Hit nonRaymarched;
+    Hit hit;
+
+    int bsdfDepth = 0;
+
     for (int i = 0; i <= RAY_ITERATIONS; i++)
     {
         if (attenuation < 1e-2)
@@ -655,11 +774,41 @@ vec3 radiance(Ray ray, SunLight sunLight)
             break;
         }
 
-        Hit hit = sceneIntersection(ray, lastPortal);
+        hit = sceneIntersection(ray, lastPortal, nonRaymarched);
+
+        if (hit.hitObject && hit.raymarching && !(bsdfDepth > 1))
+        {
+            hit = sceneIntersectionRayMarching(ray);
+        }
+
+        if (hit == nullHit || hit.distanceTo > nonRaymarched.distanceTo || (bsdfDepth > 1))
+        {
+            hit = nonRaymarched;
+        }
 
         if (hit.hitObject)
         {  
-            if (!hit.portal)
+            if (hit.portal)
+            {
+                // Error color
+                tempColor = vec3(1., 0., 0.);
+                stopIterations = true;
+
+                if ((targetPortal = findTargetPortal(lastPortal)) != nullPortal)
+                {
+                    ray = portalizeHittedRay(ray, hit, lastPortal, targetPortal);
+
+                    tempColor = vec3(0.);
+                    stopIterations = false;
+                }
+
+                color += tempColor;//vec3(0.);
+            }
+            /* else if (hit.raymarching)
+            {
+                color = vec3(1., 1., 0.5);
+            } */
+            else
             {
                 tempColor = hit.material.color;
 
@@ -683,27 +832,13 @@ vec3 radiance(Ray ray, SunLight sunLight)
 
                     Ray nextRay = Ray(hit.position + epsilon * bsdfDirection, bsdfDirection);
 
+                    bsdfDepth++;
+
                     backBrdf *= brdf;
                     ray = nextRay;
                 }
 
                 color += tempColor;
-            }
-            else
-            {
-                // Error color
-                tempColor = vec3(1., 0., 0.);
-                stopIterations = true;
-
-                if ((targetPortal = findTargetPortal(lastPortal)) != nullPortal)
-                {
-                    ray = portalizeHittedRay(ray, hit, lastPortal, targetPortal);
-
-                    tempColor = vec3(0.);
-                    stopIterations = false;
-                }
-
-                color += tempColor;//vec3(0.);
             }
         }
         else
@@ -725,7 +860,6 @@ void main()
     Camera camera = Camera(1.5, camera_rotation, camera_position);
     SunLight sunLight = SunLight(1., normalize(vec3(2., -2., -1.)), vec3(1.));
 
-    //flatIdx = int(dot(gl_FragCoord.xy, vec2(1, 4096)));
     seed = bluenoise(gl_FragCoord.xy);
 
     vec3 color = vec3(0.);
@@ -738,6 +872,7 @@ void main()
     RotationMatrixComponents rotationComponents = rotationMatrix(camera.rotation);
     mat4 rotationTransform = rotationComponents.y * rotationComponents.x;
 
+    // Getting color of pixel by every sample
     for (int i = 0; i < MSAA * MSAA; i++)
     {
         for (int j = 0; j < SAMPLES_PER_MSAA_LEVEL; j++)
@@ -757,8 +892,10 @@ void main()
         }
     }
     
+    // Color normalization
     color = pow(color / (MSAA * MSAA) / float(SAMPLES_PER_MSAA_LEVEL), vec3(1. / gammaCorrection));
 
+    // Denoising
     vec3 accumColor = texture(accumTexture, gl_FragCoord.xy / screenSize.xy).xyz;
 
     #ifdef DENOISE
@@ -768,8 +905,9 @@ void main()
     }
     #endif
 
+    // Vignette
     // vec2 vignetteUv = gl_FragCoord.xy / screenSize.xy;
     // color *= 0.9 + 0.1 * pow(16.0 * vignetteUv.x * vignetteUv.y * (1.0 - vignetteUv.x) * (1.0 - vignetteUv.y), 0.1);  
 
-    outputColor = vec4(color, 1.0);
+    outputColor = vec4(color, 1.);
 }

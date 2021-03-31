@@ -33,7 +33,7 @@ namespace PortalsRT.Particles
 
         public void ProcessPhysics(float deltaTime)
         {
-            velocity += Global.Gravity * deltaTime * 100;
+            velocity += Physics.Forces.Gravity * deltaTime * 100;
             position += velocity * deltaTime;
         }
 
