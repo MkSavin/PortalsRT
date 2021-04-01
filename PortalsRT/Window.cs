@@ -100,7 +100,17 @@ namespace PortalsRT
             base.OnLoad();
         }
 
-        public void Render(Action<double, ShaderProgram> renderCallback, Action<double> updateCallback, Action<double, ShaderProgram> uiCallback)
+        public Window KeyboardKeyDown(Action<ControlsHelper> callback)
+        {
+            KeyDown += (e) => {
+                ControlsHelper controlsHelper = new ControlsHelper(e);
+                callback?.Invoke(controlsHelper);
+            };
+
+            return this;
+        }
+
+        public Window Render(Action<double, ShaderProgram> renderCallback, Action<double> updateCallback, Action<double, ShaderProgram> uiCallback)
         {
             Global.currentWindow = this;
 
@@ -113,7 +123,7 @@ namespace PortalsRT
                 Title = $"Portals RT";
                 watch.Restart();
 
-                updateCallback.Invoke(Game.DeltaTime);
+                updateCallback?.Invoke(Game.DeltaTime);
             };
 
             RenderFrame += (e) =>
@@ -128,7 +138,7 @@ namespace PortalsRT
                 GL.ActiveTexture(TextureUnit.Texture0);
                 GL.BindTexture(TextureTarget.Texture2D, framebufferTexture);
 
-                renderCallback.Invoke(Game.DeltaTime, shader);
+                renderCallback?.Invoke(Game.DeltaTime, shader);
 
                 GL.BindVertexArray(vertexArrayObject);
                 GL.DrawArrays(PrimitiveType.TriangleStrip, 0, 5);
@@ -137,12 +147,14 @@ namespace PortalsRT
 
                 uiPlaneShader.Use();
 
-                uiCallback.Invoke(Game.DeltaTime, uiPlaneShader);
+                uiCallback?.Invoke(Game.DeltaTime, uiPlaneShader);
 
                 SwapBuffers();
             };
 
             Run();
+
+            return this;
         }
 
         protected override void OnUpdateFrame(FrameEventArgs e)

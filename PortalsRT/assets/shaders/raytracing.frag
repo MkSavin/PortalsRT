@@ -4,7 +4,7 @@
 #define RAY_ITERATIONS 4
 #define MSAA 1
 #define SAMPLES_PER_MSAA_LEVEL 1
-#define DENOISE .9//.75//.96
+#define DENOISE .96
 
 // Ray Marching
 #define RAY_MARCHING_STEPS 128
@@ -32,19 +32,24 @@ const float epsilon = 4e-4;
 
 uniform int frameNumber;
 uniform float frameRate;
+uniform bool raymarchingEnabled;
+uniform bool denoisingEnabled;
 uniform vec3 screenSize;
+
 uniform bool camera_moved;
 uniform vec3 camera_rotation;
 uniform vec3 camera_position;
+
 layout(binding=0) uniform sampler2D accumTexture;
 layout(binding=1) uniform sampler2D bluenoiseMask;
 
 layout(location = 0) out vec4 outputColor;
 
-//** Math **
-float seed = 0;
+//------------ ** Math ** ------------
+// Blue noise
+lowp float seed = 0;
 
-float bluenoise(vec2 uv)
+lowp float bluenoise(vec2 uv)
 {
     uv += 12.2130 * vec2(frameNumber);
     return texture(bluenoiseMask, (uv + 0.5) / vec2(192.).xy, 0.0).x;
@@ -62,9 +67,41 @@ lowp vec3 hash3() {
     return fract(sin(vec3(seed += 0.1, seed += 0.1, seed += 0.1)) * vec3(43758.5453123, 22578.1459123, 19642.3490423));
 }
 
-//** Scene **
+// Transform matrixes
+struct RotationMatrixComponents
+{
+    mat4 x;
+    mat4 y;
+    mat4 z;
+};
 
-//** Properties **
+RotationMatrixComponents rotationMatrix(vec3 rotation)
+{
+    mat4 rotationX = mat4(
+        1, 0,               0,                0,
+        0, cos(rotation.x), -sin(rotation.x), 0,
+        0, sin(rotation.x), cos(rotation.x),  0,
+        0, 0,               0,                1
+    );
+
+    mat4 rotationY = mat4(
+        cos(rotation.y),  0, sin(rotation.y), 0,
+        0,                1, 0,               0,
+        -sin(rotation.y), 0, cos(rotation.y), 0,
+        0,                0, 0,               1
+    );
+
+    mat4 rotationZ = mat4(
+        cos(rotation.z), -sin(rotation.z), 0, 0,
+        sin(rotation.z), cos(rotation.z),  0, 0,
+        0,               0,                1, 0,
+        0,               0,                0, 1
+    );
+
+    return RotationMatrixComponents(rotationX, rotationY, rotationZ);
+}
+
+//------------ ** Properties ** ------------
 struct Material
 {
     vec3 color;
@@ -76,7 +113,7 @@ struct Material
     bool fullBsdf;
 };
 
-//** Scene Objects **
+//------------ ** Scene Objects ** ------------
 struct Camera
 {
     // float fov;
@@ -148,7 +185,7 @@ struct Julia
     vec4 constants;
 };
 
-//** Global **
+//------------ ** Raytracing ** ------------
 struct Ray
 {
     vec3 origin;
@@ -169,41 +206,8 @@ struct Hit
 Material nullMaterial = Material(vec3(0.), 0., 0., 0., 0., false);
 Hit nullHit = Hit(nullMaterial, 10000, vec3(0.), vec3(0.), false, false, false);
 
-//** MATH **
-struct RotationMatrixComponents
-{
-    mat4 x;
-    mat4 y;
-    mat4 z;
-};
-
-RotationMatrixComponents rotationMatrix(vec3 rotation)
-{
-    mat4 rotationX = mat4(
-        1, 0,               0,                0,
-        0, cos(rotation.x), -sin(rotation.x), 0,
-        0, sin(rotation.x), cos(rotation.x),  0,
-        0, 0,               0,                1
-    );
-
-    mat4 rotationY = mat4(
-        cos(rotation.y),  0, sin(rotation.y), 0,
-        0,                1, 0,               0,
-        -sin(rotation.y), 0, cos(rotation.y), 0,
-        0,                0, 0,               1
-    );
-
-    mat4 rotationZ = mat4(
-        cos(rotation.z), -sin(rotation.z), 0, 0,
-        sin(rotation.z), cos(rotation.z),  0, 0,
-        0,               0,                1, 0,
-        0,               0,                0, 1
-    );
-
-    return RotationMatrixComponents(rotationX, rotationY, rotationZ);
-}
-
-//** INTERSECTIONS **
+//------------ ** INTERSECTIONS ** ------------
+// RayTracing
 Hit boxIntersection(Ray ray, Box box, out vec2 uvPosition, out int faceNumber) 
 {
     mat4 position = mat4(
@@ -354,8 +358,7 @@ Hit sphereIntersection(Ray ray, Sphere sphere)
     return Hit(sphere.material, distanceTo, hitPosition, (hitPosition - sphere.position) / sphere.radius, true, false, false);
 }
 
-//** RAYTRACING **
-
+// Skyes
 vec3 skySimple(vec3 direction)
 {
     return vec3(0.001) * direction.y;
@@ -381,18 +384,19 @@ vec3 sky(Ray ray, vec3 sunDirection, bool fast)
     return clamp(color * 0.085, 0., 1.);
 }
 
-const int portalsNumber = 4;
+const int portalsNumber = 6;
 Portal portals[portalsNumber];
 
 Portal nullPortal = Portal(Plane(vec2(0.), vec3(0.), vec3(0.), nullMaterial));
 
-const int portalsConnectionsNumber = 2;
+const int portalsConnectionsNumber = 3;
 PortalConnection portalConnections[portalsConnectionsNumber];
 
 PortalConnection nullPortalConnection = PortalConnection(nullPortal, nullPortal);
 
-Julia julia = Julia(Box(vec3(32.), vec3(0., 0., 0.), vec3(6.2, 0.5, 0), Material(vec3(1.), 0., 5, 0.2, 0., true)), vec4(-0.137, -0.630, -0.475, -0.046));
+Julia julia;
 
+// GENERAL SCENE INTERSECTION
 Hit sceneIntersection(Ray ray, out Portal lastHittedPortal, out Hit withoutRayMarching)
 {
     lastHittedPortal = nullPortal;
@@ -418,7 +422,7 @@ Hit sceneIntersection(Ray ray, out Portal lastHittedPortal, out Hit withoutRayMa
     // PLANE
     Material roomMaterial = Material(vec3(1.), 0., 5, 0.2, 0., true);
 
-    const int planesNumber = 14;
+    const int planesNumber = 7 * 3;
     Plane planes[planesNumber];
 
     float roomOffset = 0.;
@@ -440,6 +444,16 @@ Hit sceneIntersection(Ray ray, out Portal lastHittedPortal, out Hit withoutRayMa
     planes[11] = Plane(vec2(1., 4.), vec3(0., 0., -PI / 2), vec3(roomOffset + 2., 1., 0), roomMaterial);
     planes[12] = Plane(vec2(1., 2.), vec3(0., PI / 2, PI / 2), vec3(roomOffset + 0., 1., -4.), roomMaterial);
     planes[13] = Plane(vec2(1., 2.), vec3(0., -PI / 2., -PI / 2), vec3(roomOffset + 0., 1., 4.), roomMaterial);
+
+    roomOffset = 12;
+
+    planes[14] = Plane(vec2(2., 4.), vec3(0.), vec3(roomOffset + 0., 0., 0.), roomMaterial);
+    planes[15] = Plane(vec2(1., 0.5), vec3(0., 0., PI / 2), vec3(roomOffset + 2., 1., 3.5), roomMaterial);
+    planes[16] = Plane(vec2(1., 0.5), vec3(0., 0., PI / 2), vec3(roomOffset + 2., 1., -3.5), roomMaterial);
+    planes[17] = Plane(vec2(1., 1.), vec3(0., 0., PI / 2), vec3(roomOffset + 2., 1., 0), roomMaterial);
+    planes[18] = Plane(vec2(1., 4.), vec3(0., 0., -PI / 2), vec3(roomOffset - 2., 1., 0), roomMaterial);
+    planes[19] = Plane(vec2(1., 2.), vec3(0., PI / 2, PI / 2), vec3(roomOffset + 0., 1., -4.), roomMaterial);
+    planes[20] = Plane(vec2(1., 2.), vec3(0., -PI / 2., -PI / 2), vec3(roomOffset + 0., 1., 4.), roomMaterial);
 
     for (int i = 0; i < planesNumber; i++)
     {
@@ -472,13 +486,6 @@ Hit sceneIntersection(Ray ray, out Portal lastHittedPortal, out Hit withoutRayMa
     // BOX
     const int boxesNumber = 2;
     Box boxes[boxesNumber];
-
-    /*
-    vec3 size;
-    vec3 rotation;
-    vec3 position;
-    Material material;
-    */
 
     vec2 uvPosition;
     int faceNumber;
@@ -515,8 +522,18 @@ Hit sceneIntersection(Ray ray, out Portal lastHittedPortal, out Hit withoutRayMa
                     Plane(vec2(1.), vec3(PI, 0., PI / 2), vec3(roomOffset - 2., 1., -2.), nullMaterial)
                 );
 
+    roomOffset = 12;
+
+    portals[4] = Portal(
+                    Plane(vec2(1.), vec3(0., 0., PI / 2), vec3(roomOffset + 2., 1., 2.), nullMaterial)
+                );
+    portals[5] = Portal(
+                    Plane(vec2(1.), vec3(PI, 0., PI / 2), vec3(roomOffset + 2., 1., -2.), nullMaterial)
+                );
+
     portalConnections[0] = PortalConnection(portals[0], portals[2]);
-    portalConnections[1] = PortalConnection(portals[1], portals[3]);
+    portalConnections[1] = PortalConnection(portals[1], portals[4]);
+    portalConnections[2] = PortalConnection(portals[3], portals[5]);
 
     for (int i = 0; i < portalsNumber; i++)
     {
@@ -533,25 +550,28 @@ Hit sceneIntersection(Ray ray, out Portal lastHittedPortal, out Hit withoutRayMa
     withoutRayMarching = hit;
 
     // JULIA
-    tempHit = boxIntersection(ray, julia.bounds, uvPosition, faceNumber);
-
-    if (tempHit.hitObject && (!hit.hitObject || tempHit.distanceTo < hit.distanceTo))
+    if (raymarchingEnabled)
     {
-        hit = tempHit;
-        hit.raymarching = true;
+        tempHit = boxIntersection(ray, julia.bounds, uvPosition, faceNumber);
+
+        if (tempHit.hitObject && (!hit.hitObject || tempHit.distanceTo < hit.distanceTo))
+        {
+            hit = tempHit;
+            hit.raymarching = true;
+        }
     }
 
     return hit;
 }
 
-// Raymarching
+// RayMarching
 
-vec4 qSquare(vec4 a)
+lowp vec4 qSquare(vec4 a)
 {
     return vec4(a.x * a.x - dot(a.yzw, a.yzw), 2. * a.x * a.yzw);
 }
 
-float juliaDistance(Julia julia, vec3 p) {
+lowp float juliaDistance(Julia julia, vec3 p) {
     vec4 f = vec4(p * (1. / julia.bounds.size + 1.) - julia.bounds.position, 0.0);
     
     float fp2 = 1.0;
@@ -572,7 +592,6 @@ float juliaDistance(Julia julia, vec3 p) {
     return 0.5 * log(r) * (r / sqrt(fp2)) / length(1. / julia.bounds.size + 1.);
 }
 
-// Method 1
 vec3 juliaNormal(vec3 position, float distanceToObject)
 {
     vec3 normal;
@@ -584,6 +603,7 @@ vec3 juliaNormal(vec3 position, float distanceToObject)
     return normalize(normal - distanceToObject);
 }
 
+// GENERAL SCENE INTERSECTION
 Hit sceneIntersectionRayMarching(Ray ray)
 {
     vec3 e = vec3(0.0005, 0., 0.);
@@ -599,7 +619,7 @@ Hit sceneIntersectionRayMarching(Ray ray)
         
         distanceToObject = juliaDistance(julia, position);
         
-        if (distanceToRayOrigin > 15.)
+        if (distanceToRayOrigin > 12.)
         {
             break;
         }
@@ -615,7 +635,7 @@ Hit sceneIntersectionRayMarching(Ray ray)
     return nullHit;
 }
 
-// Colors computation
+//------------ ** COLORS COMPUTATION ** ------------
 
 // "Edges shadow"
 // Schlick's approximation
@@ -624,7 +644,6 @@ float fresnel(vec3 normal, vec3 rayDirection, Material material)
     return pow(1. - clamp(dot(normal, rayDirection), 0., 1.), material.specularPower) * (1. - material.specularIntensity) + material.specularIntensity;
 }
 
-// FOR SPHERE AND SUN LIGHT
 vec3 lightCast(vec3 hitPosition, vec3 normal, SunLight light)
 {
     Ray ray = Ray(hitPosition + epsilon * -light.direction, -light.direction);
@@ -675,8 +694,8 @@ mat3 onb(vec3 normal)
 	} 
     else 
     {
-		float a = 1.0 / (1.0 + normal.z);
-		float b = -normal.x * normal.y * a;
+		lowp float a = 1.0 / (1.0 + normal.z);
+		lowp float b = -normal.x * normal.y * a;
 		ret[0] = vec3(1.0 - normal.x * normal.x * a, b, -normal.x);
 		ret[2] = vec3(b, 1.0 - normal.y * normal.y * a, -normal.y);
 	}
@@ -869,6 +888,13 @@ void main()
     vec3 direction;
     vec2 screenspaceDirection;
 
+    // Julia
+    lowp float juliaZAnimationWidth = 3.;
+    lowp float juliaZAnimated = juliaZAnimationWidth * cos(frameNumber * .005 * PI / 2);
+
+    julia = Julia(Box(vec3(32.), vec3(0., 0., 0.), vec3(6.2, 0.5, juliaZAnimated), Material(vec3(1.), 0., 5, 0.2, 0., true)), 0.45 * cos(vec4(0.5,3.9,1.4,1.1) + (frameNumber * .015) * vec4(1.2,1.7,1.3,2.5)) - vec4(0.3,0.0,0.0,0.0));
+
+    // Rendering
     RotationMatrixComponents rotationComponents = rotationMatrix(camera.rotation);
     mat4 rotationTransform = rotationComponents.y * rotationComponents.x;
 
@@ -899,7 +925,7 @@ void main()
     vec3 accumColor = texture(accumTexture, gl_FragCoord.xy / screenSize.xy).xyz;
 
     #ifdef DENOISE
-    if (frameNumber > 0 && !camera_moved)
+    if (frameNumber > 0 && !camera_moved && denoisingEnabled)
     {
         color = color * (1. - DENOISE) + accumColor * DENOISE;
     }

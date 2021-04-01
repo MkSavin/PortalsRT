@@ -18,6 +18,7 @@ using PortalsRT.Output;
 using PortalsRT.Particles;
 using PortalsRT.UI;
 using PortalsRT.UI.Elements;
+using PortalsRT.Logic;
 
 namespace PortalsRT
 {
@@ -36,13 +37,19 @@ namespace PortalsRT
             Portal c = (Portal)new Portal().SetTransform(new Transform(new Vector3(6 - 2f, 1f, 2f), new Vector3((float)Math.PI, 0, (float)Math.PI / 2), new Vector3(2f)));
             Portal d = (Portal)new Portal().SetTransform(new Transform(new Vector3(6 - 2f, 1f, -2f), new Vector3((float)Math.PI, 0, (float)Math.PI / 2), new Vector3(2f)));
 
+            Portal e = (Portal)new Portal().SetTransform(new Transform(new Vector3(12 + 2f, 1f, 2f), new Vector3(0, 0, (float)Math.PI / 2), new Vector3(2f)));
+            Portal f = (Portal)new Portal().SetTransform(new Transform(new Vector3(12 + 2f, 1f, -2f), new Vector3(0, 0, (float)Math.PI / 2), new Vector3(2f)));
+
             a.ConnectToPortal(c);
-            b.ConnectToPortal(d);
+            b.ConnectToPortal(e);
+            d.ConnectToPortal(f);
 
             portals.Add(a);
             portals.Add(b);
             portals.Add(c);
             portals.Add(d);
+            portals.Add(e);
+            portals.Add(f);
         }
 
         private static void LoadParticles()
@@ -122,6 +129,12 @@ namespace PortalsRT
                         .SetPivot(new Vector2(0, 1))
                         .SetPosition(new Vector2(80, 220))
                     );
+                uiElements.Add(
+                    new GameStateView()
+                        .SetScreenPivot(new Vector2(0, 1))
+                        .SetPivot(new Vector2(0, 1))
+                        .SetPosition(new Vector2(80, 260))
+                    );
                 //uiElements.Add(
                 //    new ControlsTip()
                 //        .SetScreenPivot(new Vector2(1, 0))
@@ -131,28 +144,39 @@ namespace PortalsRT
 
                 Vector2i halfWindowSize = window.Size / 2;
 
-                window.Render(
-                    renderCallback: (deltaTick, shader) => {
+                window
+                    .KeyboardKeyDown((helper) => {
+                        helper
+                            .KeyPress(Keys.F, () => { Game.RayMarchingEnabled = !Game.RayMarchingEnabled; })
+                            .KeyPress(Keys.E, () => { Game.DenoisingEnabled = !Game.DenoisingEnabled; });
+                    })
+                    .Render(
+                        renderCallback: (deltaTick, shader) => {
 
-                        // StatBar.Write();
-                        PassParticles((float)deltaTick, shader);
-                        Camera.Instance.UploadTransformToShader(shader);
+                            shader.SetInt("raymarchingEnabled", Game.RayMarchingEnabled ? 1 : 0);
+                            shader.SetInt("denoisingEnabled", Game.DenoisingEnabled ? 1 : 0);
+                        
+                            // StatBar.Write();
 
-                    },
-                    updateCallback: (deltaTick) => {
+                            PassParticles((float)deltaTick, shader);
+                            Camera.Instance.UploadTransformToShader(shader);
 
-                        Camera.Instance.ProcessInput(window.KeyboardState, window.MouseState.Delta);
-                        Camera.Instance.ProcessPhysics(portals);
+                        },
+                        updateCallback: (deltaTick) => {
 
-                    },
-                    uiCallback: (deltaTick, shader) => {
+                            Camera.Instance.ProcessInput(window.KeyboardState, window.MouseState.Delta);
+                            Camera.Instance.ProcessPhysics(portals);
 
-                        foreach (var element in uiElements)
-                        {
-                            element.Render(shader);
+                        },
+                        uiCallback: (deltaTick, shader) => {
+
+                            foreach (var element in uiElements)
+                            {
+                                element.Render(shader);
+                            }
+
                         }
-
-                    });
+                    );
             }
         }
 
